@@ -1,4 +1,5 @@
 import { Listing, PendingListing } from '../types';
+import { formatNairaSimple } from '../utils/currency';
 
 interface ListingCardProps {
   listing: Listing | PendingListing;
@@ -24,7 +25,7 @@ export function ListingCard({ listing }: ListingCardProps) {
         {listing.price && (
           <div className="detail-row">
             <span className="detail-label">Price:</span>
-            <span className="detail-value">${listing.price}/{listing.unit}</span>
+            <span className="detail-value">{formatNairaSimple(listing.price)}/{listing.unit}</span>
           </div>
         )}
         <div className="detail-row">

@@ -1,53 +1,68 @@
 import { Listing, NewListing, ReferencePrice } from '../types';
-
-const API_BASE = '/api';
+import { supabase } from './supabase';
 
 export async function createListing(listing: NewListing): Promise<Listing> {
-  const response = await fetch(`${API_BASE}/listings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(listing)
-  });
+  const { data, error } = await supabase
+    .from('listings')
+    .insert([{
+      ...listing,
+      status: 'synced'
+    }])
+    .select()
+    .single();
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to create listing');
+  if (error) {
+    console.error('Error creating listing:', error);
+    throw new Error(error.message || 'Failed to create listing');
   }
 
-  const result = await response.json();
-  return result.data;
+  return data as Listing;
 }
 
 export async function fetchListings(filters?: { crop?: string; location?: string }): Promise<Listing[]> {
-  const params = new URLSearchParams();
-  if (filters?.crop) params.append('crop', filters.crop);
-  if (filters?.location) params.append('location', filters.location);
+  let query = supabase
+    .from('listings')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-  const url = `${API_BASE}/listings${params.toString() ? `?${params.toString()}` : ''}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch listings');
+  if (filters?.crop) {
+    query = query.ilike('crop', `%${filters.crop}%`);
   }
 
-  const result = await response.json();
-  return result.data;
+  if (filters?.location) {
+    query = query.ilike('location', `%${filters.location}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching listings:', error);
+    throw new Error(error.message || 'Failed to fetch listings');
+  }
+
+  return (data || []) as Listing[];
 }
 
 export async function fetchPrices(filters?: { crop?: string; region?: string }): Promise<ReferencePrice[]> {
-  const params = new URLSearchParams();
-  if (filters?.crop) params.append('crop', filters.crop);
-  if (filters?.region) params.append('region', filters.region);
+  let query = supabase
+    .from('reference_prices')
+    .select('*')
+    .order('date', { ascending: false });
 
-  const url = `${API_BASE}/prices${params.toString() ? `?${params.toString()}` : ''}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch prices');
+  if (filters?.crop) {
+    query = query.ilike('crop', `%${filters.crop}%`);
   }
 
-  const result = await response.json();
-  return result.data;
+  if (filters?.region) {
+    query = query.ilike('region', `%${filters.region}%`);
+  }
+
+  const { data, error} = await query;
+
+  if (error) {
+    console.error('Error fetching prices:', error);
+    throw new Error(error.message || 'Failed to fetch prices');
+  }
+
+  return (data || []) as ReferencePrice[];
 }

@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
+import { ButtonSpinner } from '../components/ButtonSpinner';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { createListing, fetchPrices } from '../services/api';
 import { addPendingListing, cachePrices, getCachedPrices } from '../services/db';
 import { NewListing, PendingListing, ReferencePrice } from '../types';
+import { formatNairaSimple } from '../utils/currency';
 
 const UNITS = [
   { value: 'kg', label: 'Kilograms (kg)' },
@@ -167,7 +169,7 @@ export function CreateListing() {
           step="0.01"
           value={formData.price}
           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-          placeholder="₦12,500"
+          placeholder="e.g., 12500"
         />
 
         {relevantPrices.length > 0 && (
@@ -177,7 +179,7 @@ export function CreateListing() {
               {relevantPrices.map((price) => (
                 <div key={price.id} className="price-reference-item">
                   <span className="price-reference-region">{price.region}</span>
-                  <span className="price-reference-amount">${price.price}/{price.unit}</span>
+                  <span className="price-reference-amount">{formatNairaSimple(price.price)}/{price.unit}</span>
                 </div>
               ))}
             </div>
@@ -214,7 +216,7 @@ export function CreateListing() {
         />
 
         <Button type="submit" disabled={loading}>
-          {loading ? 'Saving...' : isOnline ? 'Create Listing' : 'Save for Later Sync'}
+          {loading ? <><ButtonSpinner /> Saving...</> : isOnline ? 'Create Listing' : 'Save for Later Sync'}
         </Button>
       </form>
     </div>

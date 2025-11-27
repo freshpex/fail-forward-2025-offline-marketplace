@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ListingCard } from '../components/ListingCard';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
+import { ComponentLoader } from '../components/ComponentLoader';
 import { useListings } from '../hooks/useListings';
 import { syncPendingListings, setupOnlineListener } from '../services/sync';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -71,7 +72,7 @@ export function BrowseListings() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {loading && <div className="loading">Loading listings...</div>}
+      {loading && <ComponentLoader message="Loading listings..." />}
 
       {!loading && allListings.length === 0 && (
         <div className="empty-state">
