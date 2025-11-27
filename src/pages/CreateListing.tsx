@@ -35,6 +35,7 @@ export function CreateListing() {
     price: '',
     location: '',
     contact_phone: '',
+    contact_email: '',
     farmer_name: '',
     image_url: ''
   });
@@ -84,6 +85,7 @@ export function CreateListing() {
         price: formData.price ? parseFloat(formData.price) : null,
         location: formData.location,
         contact_phone: formData.contact_phone,
+        contact_email: formData.contact_email || undefined,
         farmer_name: formData.farmer_name || undefined,
         image_url: formData.image_url || undefined
       };
@@ -111,6 +113,7 @@ export function CreateListing() {
         price: '',
         location: '',
         contact_phone: '',
+        contact_email: '',
         farmer_name: '',
         image_url: ''
       });
@@ -209,6 +212,14 @@ export function CreateListing() {
           value={formData.contact_phone}
           onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
           placeholder="+234 9054531822"
+        />
+
+        <Input
+          label="Contact Email (Optional)"
+          type="email"
+          value={formData.contact_email}
+          onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+          placeholder="example@email.com"
         />
 
         <Input

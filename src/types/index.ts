@@ -6,6 +6,7 @@ export interface Listing {
   price?: number | null;
   location: string;
   contact_phone: string;
+  contact_email?: string | null;
   farmer_name?: string | null;
   image_url?: string | null;
   status: 'pending' | 'synced' | 'failed';
@@ -20,6 +21,7 @@ export interface NewListing {
   price?: number | null;
   location: string;
   contact_phone: string;
+  contact_email?: string;
   farmer_name?: string;
   image_url?: string;
 }
