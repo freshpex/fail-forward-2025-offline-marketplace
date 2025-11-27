@@ -82,6 +82,23 @@ export function UserDropdown() {
             My Listings
           </Link>
           <div className="dropdown-divider" />
+          <Link
+            to="/payment-settings"
+            className="dropdown-item"
+            onClick={() => setIsOpen(false)}
+            role="menuitem"
+          >
+            Payment Settings
+          </Link>
+          <Link
+            to="/escrow"
+            className="dropdown-item dropdown-item-coming-soon"
+            onClick={() => setIsOpen(false)}
+            role="menuitem"
+          >
+            Escrow <span className="badge-mini">Coming Soon</span>
+          </Link>
+          <div className="dropdown-divider" />
           <button
             className="dropdown-item"
             onClick={handleLogout}

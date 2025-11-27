@@ -1,6 +1,12 @@
 import { Listing, NewListing, ReferencePrice } from '../types';
 import { supabase } from './supabase';
 
+export interface NewPurchaseInterest {
+  listing_id: string;
+  buyer_id?: string;
+  buyer_email?: string;
+}
+
 export async function createListing(listing: NewListing): Promise<Listing> {
   const { data, error } = await supabase
     .from('listings')
@@ -65,4 +71,20 @@ export async function fetchPrices(filters?: { crop?: string; region?: string }):
   }
 
   return (data || []) as ReferencePrice[];
+}
+
+export async function createPurchaseInterest(interest: NewPurchaseInterest): Promise<void> {
+  const { error } = await supabase
+    .from('purchase_interests')
+    .insert([{
+      listing_id: interest.listing_id,
+      buyer_id: interest.buyer_id || null,
+      buyer_email: interest.buyer_email || null,
+      status: 'interested'
+    }]);
+
+  if (error) {
+    console.error('Error creating purchase interest:', error);
+    throw new Error(error.message || 'Failed to create purchase interest');
+  }
 }

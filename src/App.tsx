@@ -12,6 +12,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Onboarding } from './pages/Onboarding';
 import { MyListings } from './pages/MyListings';
 import { GetStarted } from './pages/GetStarted';
+import { PaymentSettings } from './pages/PaymentSettings';
+import { Escrow } from './pages/Escrow';
 
 function App() {
   return (
@@ -58,6 +60,15 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="payment-settings"
+            element={
+              <ProtectedRoute>
+                <PaymentSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="escrow" element={<Escrow />} />
         </Route>
       </Routes>
     </BrowserRouter>

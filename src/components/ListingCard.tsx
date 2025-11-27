@@ -1,18 +1,25 @@
+import { useState } from 'react';
 import { Listing, PendingListing } from '../types';
 import { formatNairaSimple } from '../utils/currency';
 import { getCropIcon, isValidImageUrl } from '../utils/imageHelpers';
+import { ContactSellerModal } from './ContactSellerModal';
 
 interface ListingCardProps {
   listing: Listing | PendingListing;
+  showContactButton?: boolean;
 }
 
-export function ListingCard({ listing }: ListingCardProps) {
+export function ListingCard({ listing, showContactButton = true }: ListingCardProps) {
   const isPending = 'localId' in listing;
   const status = listing.status;
   const hasImage = isValidImageUrl(listing.image_url);
+  const [showModal, setShowModal] = useState(false);
+
+  const isFullListing = !isPending && 'id' in listing;
 
   return (
-    <div className={`listing-card ${isPending ? 'pending' : ''}`}>
+    <>
+      <div className={`listing-card ${isPending ? 'pending' : ''}`}>
       <div className="listing-image-container">
         {hasImage ? (
           <img
@@ -61,7 +68,30 @@ export function ListingCard({ listing }: ListingCardProps) {
             <span className="detail-value phone">{listing.contact_phone}</span>
           </div>
         </div>
+
+        {showContactButton && isFullListing && (
+          <>
+            <div className="listing-badges">
+              <span className="badge badge-offline">📡 Offline capable</span>
+              <span className="badge badge-lowdata">📊 Low data mode</span>
+            </div>
+            <button
+              className="contact-seller-btn"
+              onClick={() => setShowModal(true)}
+            >
+              📞 Contact Seller
+            </button>
+          </>
+        )}
       </div>
     </div>
+
+    {showModal && isFullListing && (
+      <ContactSellerModal
+        listing={listing as Listing}
+        onClose={() => setShowModal(false)}
+      />
+    )}
+  </>
   );
 }
