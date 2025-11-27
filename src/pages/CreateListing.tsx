@@ -202,7 +202,7 @@ export function CreateListing() {
           required
           value={formData.contact_phone}
           onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-          placeholder="+234 XXX XXXX"
+          placeholder="+234 9054531822"
         />
 
         <Input
