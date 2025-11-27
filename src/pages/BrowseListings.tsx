@@ -60,7 +60,7 @@ export function BrowseListings() {
             type="text"
             value={locationFilter}
             onChange={(e) => setLocationFilter(e.target.value)}
-            placeholder="e.g., Kisumu"
+            placeholder="e.g., Lagos"
           />
         </div>
         <div className="filter-actions">
