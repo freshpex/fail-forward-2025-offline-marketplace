@@ -167,7 +167,7 @@ export function CreateListing() {
           step="0.01"
           value={formData.price}
           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-          placeholder="₦1,500"
+          placeholder="₦12,500"
         />
 
         {relevantPrices.length > 0 && (
@@ -202,7 +202,7 @@ export function CreateListing() {
           required
           value={formData.contact_phone}
           onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-          placeholder="+254 XXX XXXX"
+          placeholder="+234 XXX XXXX"
         />
 
         <Input
