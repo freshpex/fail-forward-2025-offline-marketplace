@@ -4,6 +4,7 @@ import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { ButtonSpinner } from '../components/ButtonSpinner';
+import { ImageUpload } from '../components/ImageUpload';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { createListing, fetchPrices } from '../services/api';
 import { addPendingListing, cachePrices, getCachedPrices } from '../services/db';
@@ -34,7 +35,8 @@ export function CreateListing() {
     price: '',
     location: '',
     contact_phone: '',
-    farmer_name: ''
+    farmer_name: '',
+    image_url: ''
   });
 
   useEffect(() => {
@@ -82,7 +84,8 @@ export function CreateListing() {
         price: formData.price ? parseFloat(formData.price) : null,
         location: formData.location,
         contact_phone: formData.contact_phone,
-        farmer_name: formData.farmer_name || undefined
+        farmer_name: formData.farmer_name || undefined,
+        image_url: formData.image_url || undefined
       };
 
       if (isOnline) {
@@ -108,7 +111,8 @@ export function CreateListing() {
         price: '',
         location: '',
         contact_phone: '',
-        farmer_name: ''
+        farmer_name: '',
+        image_url: ''
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create listing');
@@ -213,6 +217,11 @@ export function CreateListing() {
           value={formData.farmer_name}
           onChange={(e) => setFormData({ ...formData, farmer_name: e.target.value })}
           placeholder="Optional"
+        />
+
+        <ImageUpload
+          onImageChange={(imageData) => setFormData({ ...formData, image_url: imageData || '' })}
+          currentImage={formData.image_url}
         />
 
         <Button type="submit" disabled={loading}>

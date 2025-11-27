@@ -7,6 +7,7 @@ export interface Listing {
   location: string;
   contact_phone: string;
   farmer_name?: string | null;
+  image_url?: string | null;
   status: 'pending' | 'synced' | 'failed';
   created_at: string;
   updated_at: string;
@@ -20,6 +21,7 @@ export interface NewListing {
   location: string;
   contact_phone: string;
   farmer_name?: string;
+  image_url?: string;
 }
 
 export interface PendingListing extends NewListing {
