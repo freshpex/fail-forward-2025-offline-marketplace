@@ -167,7 +167,7 @@ export function CreateListing() {
           step="0.01"
           value={formData.price}
           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-          placeholder="Optional"
+          placeholder="₦1,500"
         />
 
         {relevantPrices.length > 0 && (
