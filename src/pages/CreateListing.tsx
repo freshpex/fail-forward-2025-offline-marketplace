@@ -193,7 +193,7 @@ export function CreateListing() {
           required
           value={formData.location}
           onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-          placeholder="e.g., Kisumu, Western Region"
+          placeholder="e.g., Ikeja, Lagos, Nigeria"
         />
 
         <Input
