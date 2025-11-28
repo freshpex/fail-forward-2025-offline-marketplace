@@ -22,7 +22,7 @@ export function Layout() {
             <Link to="/browse" className="nav-link">Browse</Link>
             {user && <Link to="/create" className="nav-link">Sell Produce</Link>}
             <Link to="/investors" className="nav-link">Investors</Link>
-            {!user && <Link to="/login" className="nav-link nav-link-login">Login</Link>}
+            {!user && <Link to="/login" className="nav-link nav-link-login">Sell Produce</Link>}
             {!user && <Link to="/signup" className="nav-link nav-link-signup">Sign Up</Link>}
             {user && <UserDropdown />}
           </nav>
