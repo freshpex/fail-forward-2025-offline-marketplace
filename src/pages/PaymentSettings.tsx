@@ -360,8 +360,8 @@ export function PaymentSettings() {
             <div className="info-card">
               <h3>Need Help?</h3>
               <p>Contact our support team if you have questions about payments.</p>
-              <a href="mailto:support@failforward.com" className="support-link">
-                📧 support@failforward.com
+              <a href="mailto:epekipoluenoch@gmail.com" className="support-link">
+                📧 support@afrimarket.com
               </a>
             </div>
           </div>

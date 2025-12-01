@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Button } from '../components/Button';
@@ -7,8 +7,9 @@ import { ButtonSpinner } from '../components/ButtonSpinner';
 import { ImageUpload } from '../components/ImageUpload';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { createListing, fetchPrices } from '../services/api';
+import { createListing, fetchPrices, updateListing } from '../services/api';
 import { addPendingListing, cachePrices, getCachedPrices } from '../services/db';
+import { supabase } from '../services/supabase';
 import { NewListing, PendingListing, ReferencePrice } from '../types';
 import { formatNairaSimple } from '../utils/currency';
 
@@ -30,11 +31,17 @@ const SCHEDULE_OPTIONS = [
 
 export function CreateListing() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isOnline = useOnlineStatus();
   const [loading, setLoading] = useState(false);
+  const [loadingListing, setLoadingListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [referencePrices, setReferencePrices] = useState<ReferencePrice[]>([]);
+  
+  // Edit mode
+  const listingId = searchParams.get('listingId');
+  const isEditMode = !!listingId;
 
   const [formData, setFormData] = useState({
     crop: '',
@@ -52,6 +59,50 @@ export function CreateListing() {
     harvest_date: '',
     preferred_schedule: ''
   });
+
+  // Load existing listing data when in edit mode
+  useEffect(() => {
+    const loadListing = async () => {
+      if (!listingId) return;
+      
+      setLoadingListing(true);
+      try {
+        const { data, error } = await supabase
+          .from('listings')
+          .select('*')
+          .eq('id', listingId)
+          .single();
+          
+        if (error) throw error;
+        
+        if (data) {
+          setFormData({
+            crop: data.crop || '',
+            quantity: data.quantity?.toString() || '',
+            unit: data.unit || '',
+            price: data.price?.toString() || '',
+            location: data.location || '',
+            contact_phone: data.contact_phone || '',
+            contact_email: data.contact_email || '',
+            farmer_name: data.farmer_name || '',
+            image_url: data.image_url || '',
+            pickup_address: data.pickup_address || '',
+            pickup_city: data.pickup_city || '',
+            pickup_state: data.pickup_state || '',
+            harvest_date: data.harvest_date || '',
+            preferred_schedule: data.preferred_schedule || ''
+          });
+        }
+      } catch (err) {
+        console.error('Error loading listing:', err);
+        setError('Failed to load listing details');
+      } finally {
+        setLoadingListing(false);
+      }
+    };
+    
+    loadListing();
+  }, [listingId]);
 
   useEffect(() => {
     const loadPrices = async () => {
@@ -109,9 +160,17 @@ export function CreateListing() {
       };
 
       if (isOnline) {
-        await createListing(listingData);
-        setSuccess(true);
-        setTimeout(() => navigate('/browse'), 1500);
+        if (isEditMode && listingId) {
+          // Update existing listing
+          await updateListing(listingId, listingData);
+          setSuccess(true);
+          setTimeout(() => navigate('/my-listings'), 1500);
+        } else {
+          // Create new listing
+          await createListing(listingData);
+          setSuccess(true);
+          setTimeout(() => navigate('/browse'), 1500);
+        }
       } else {
         const pendingListing: PendingListing = {
           ...listingData,
@@ -124,36 +183,49 @@ export function CreateListing() {
         setTimeout(() => navigate('/browse'), 1500);
       }
 
-      setFormData({
-        crop: '',
-        quantity: '',
-        unit: '',
-        price: '',
-        location: '',
-        contact_phone: '',
-        contact_email: '',
-        farmer_name: '',
-        image_url: '',
-        pickup_address: '',
-        pickup_city: '',
-        pickup_state: '',
-        harvest_date: '',
-        preferred_schedule: ''
-      });
+      if (!isEditMode) {
+        setFormData({
+          crop: '',
+          quantity: '',
+          unit: '',
+          price: '',
+          location: '',
+          contact_phone: '',
+          contact_email: '',
+          farmer_name: '',
+          image_url: '',
+          pickup_address: '',
+          pickup_city: '',
+          pickup_state: '',
+          harvest_date: '',
+          preferred_schedule: ''
+        });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create listing');
+      setError(err instanceof Error ? err.message : isEditMode ? 'Failed to update listing' : 'Failed to create listing');
     } finally {
       setLoading(false);
     }
   };
 
+  if (loadingListing) {
+    return (
+      <div className="create-listing">
+        <h2>Loading Listing...</h2>
+        <p>Please wait while we load the listing details.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="create-listing">
-      <h2>List Your Produce</h2>
+      <h2>{isEditMode ? 'Edit Listing' : 'List Your Produce'}</h2>
       <p className="page-subtitle">
-        {isOnline
-          ? 'Fill out the form below to create your listing'
-          : 'You\'re offline. Your listing will be saved and synced when you reconnect.'}
+        {isEditMode 
+          ? 'Update your listing details below'
+          : isOnline
+            ? 'Fill out the form below to create your listing'
+            : 'You\'re offline. Your listing will be saved and synced when you reconnect.'}
       </p>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -303,7 +375,13 @@ export function CreateListing() {
         />
 
         <Button type="submit" disabled={loading}>
-          {loading ? <><ButtonSpinner /> Saving...</> : isOnline ? 'Create Listing' : 'Save for Later Sync'}
+          {loading 
+            ? <><ButtonSpinner /> Saving...</> 
+            : isEditMode 
+              ? 'Update Listing'
+              : isOnline 
+                ? 'Create Listing' 
+                : 'Save for Later Sync'}
         </Button>
       </form>
     </div>

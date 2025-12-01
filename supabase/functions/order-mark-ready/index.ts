@@ -1,8 +1,13 @@
 // @deno-types="https://deno.land/std@0.224.0/http/server.ts"
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createSupabaseClients } from '../_shared/supabaseClient.ts';
-import { ensureRole, getUserContext } from '../_shared/auth.ts';
 import { errorResponse, jsonResponse } from '../_shared/response.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
 interface MarkReadyRequest {
   order_id?: string;
@@ -10,6 +15,11 @@ interface MarkReadyRequest {
 }
 
 serve(async (req: Request) => {
+  // Handle CORS preflight request
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   if (req.method !== 'POST') {
     return errorResponse(405, 'Method not allowed');
   }
@@ -27,17 +37,19 @@ serve(async (req: Request) => {
 
   try {
     const { supabaseAdmin, supabaseUser } = createSupabaseClients(req);
-    const context = await getUserContext(req, supabaseUser, supabaseAdmin);
-
-    if (context instanceof Response) {
-      return context;
+    
+    // Get current user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return errorResponse(401, 'Missing Authorization header');
     }
 
-    const roleCheck = ensureRole(context.profile, ['seller', 'admin']);
-    if (roleCheck instanceof Response) {
-      return roleCheck;
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return errorResponse(401, 'Unauthenticated');
     }
 
+    // Load the order
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .select('id, seller_id, status')
@@ -53,7 +65,18 @@ serve(async (req: Request) => {
       return errorResponse(404, 'Order not found');
     }
 
-    if (context.profile?.role !== 'admin' && order.seller_id !== context.user.id) {
+    // Check if current user is the seller of this order
+    // or check profile for admin role
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isAdmin = profile?.role === 'admin';
+    const isSeller = order.seller_id === user.id;
+
+    if (!isAdmin && !isSeller) {
       return errorResponse(403, 'Only the seller can mark the order as ready');
     }
 

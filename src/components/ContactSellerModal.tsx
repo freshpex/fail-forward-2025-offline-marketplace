@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './Button';
 import { ButtonSpinner } from './ButtonSpinner';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -65,6 +66,7 @@ function loadPaystackScript(): Promise<void> {
 
 export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [interestMarked, setInterestMarked] = useState(false);
   const [step, setStep] = useState<'contact' | 'delivery' | 'quote' | 'payment'>('contact');
@@ -307,10 +309,15 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
             .then(() => {
               showSuccess('Payment successful! Your order has been confirmed.');
               onClose();
+              // Navigate to track order page with the order reference
+              navigate(`/track-order?ref=${encodeURIComponent(order.order_reference)}`);
             })
             .catch((verifyError: any) => {
               console.error('Payment verification failed:', verifyError);
               showError('Payment may have succeeded but verification failed. Please contact support.');
+              // Still navigate to track order so they can see status
+              onClose();
+              navigate(`/track-order?ref=${encodeURIComponent(order.order_reference)}`);
             })
             .finally(() => {
               setIsSubmitting(false);

@@ -20,6 +20,7 @@ export function Layout() {
           </h1>
           <nav className="nav">
             <Link to="/browse" className="nav-link">Browse</Link>
+            <Link to="/track-order" className="nav-link">Track Order</Link>
             {user && <Link to="/create" className="nav-link">Sell Produce</Link>}
             <Link to="/investors" className="nav-link">Investors</Link>
             {!user && <Link to="/login" className="nav-link nav-link-login">Sell Produce</Link>}

@@ -121,6 +121,42 @@ serve(async (req: Request) => {
       .update({ status: 'in_transit', shipping_provider: 'Shipbubble' })
       .eq('id', order.id);
 
+    // Notify buyer and seller with tracking number via send-sms function
+    try {
+      // Get buyer phone from manual_orders or order metadata
+      const { data: manualOrder } = await supabaseAdmin
+        .from('manual_orders')
+        .select('buyer_phone, buyer_name')
+        .eq('order_id', order.id)
+        .maybeSingle();
+
+      const { data: sellerProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('phone, full_name')
+        .eq('id', order.seller_id)
+        .maybeSingle();
+
+      const buyerPhone = manualOrder?.buyer_phone || (order.metadata as any)?.buyer_phone;
+      const buyerName = manualOrder?.buyer_name || 'Customer';
+
+      const trackingMsgBuyer = `Hi ${buyerName}, your order has been booked with tracking number ${trackingNumber}. We'll update you on the delivery status.`;
+      const trackingMsgSeller = `Order ${order.id} has been booked with tracking number ${trackingNumber}. Please hand over the goods to the logistics partner.`;
+
+      if (buyerPhone) {
+        await supabaseAdmin.functions.invoke('send-sms', {
+          body: { to: buyerPhone, message: trackingMsgBuyer, order_id: order.id, type: 'delivery_booked' },
+        });
+      }
+
+      if (sellerProfile?.phone) {
+        await supabaseAdmin.functions.invoke('send-sms', {
+          body: { to: sellerProfile.phone, message: trackingMsgSeller, order_id: order.id, type: 'delivery_booked' },
+        });
+      }
+    } catch (notifyErr) {
+      console.error('Failed to notify parties about booking:', notifyErr);
+    }
+
     return jsonResponse({ shipment: storedShipment ?? shipment });
   } catch (error) {
     console.error('delivery-book error', error);

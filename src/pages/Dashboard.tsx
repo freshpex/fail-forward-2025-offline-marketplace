@@ -29,11 +29,27 @@ export function Dashboard() {
           </Link>
         </div>
 
+        <div className="dashboard-card highlight">
+          <h3>📦 My Orders</h3>
+          <p>View orders and prepare for pickup</p>
+          <Link to="/seller-orders">
+            <Button variant="primary">Manage Orders</Button>
+          </Link>
+        </div>
+
         <div className="dashboard-card">
           <h3>Browse Market</h3>
           <p>Explore available produce</p>
           <Link to="/browse">
             <Button variant="secondary">Browse</Button>
+          </Link>
+        </div>
+
+        <div className="dashboard-card">
+          <h3>💳 Payment Settings</h3>
+          <p>Set up your bank account</p>
+          <Link to="/payment-settings">
+            <Button variant="secondary">Configure</Button>
           </Link>
         </div>
       </div>

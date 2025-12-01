@@ -146,16 +146,34 @@ serve(async (req: Request) => {
           .from('orders')
           .select(`
             *,
-            listing:listings(title, seller_id, pickup_address),
+            listing:listings(id, crop, quantity, seller_id, pickup_address, farmer_name),
             manual_order:manual_orders(buyer_name, buyer_phone)
           `)
           .eq('id', payload.order_id)
           .maybeSingle();
 
         if (orderDetails) {
+          // STOCK DEDUCTION: Deduct purchased quantity from listing
+          if (orderDetails.listing?.id && orderDetails.quantity) {
+            const currentStock = orderDetails.listing.quantity || 0;
+            const purchasedQty = orderDetails.quantity || 1;
+            const newStock = Math.max(0, currentStock - purchasedQty);
+            
+            const { error: stockError } = await supabaseAdmin
+              .from('listings')
+              .update({ quantity: newStock })
+              .eq('id', orderDetails.listing.id);
+            
+            if (stockError) {
+              console.error('Failed to deduct stock:', stockError);
+            } else {
+              console.log(`Stock updated: ${currentStock} -> ${newStock} for listing ${orderDetails.listing.id}`);
+            }
+          }
+
           const buyerPhone = orderDetails.manual_order?.[0]?.buyer_phone;
           const buyerName = orderDetails.manual_order?.[0]?.buyer_name || 'Customer';
-          const listingTitle = orderDetails.listing?.title || 'your order';
+          const listingTitle = orderDetails.listing?.crop || 'your order';
           const orderRef = orderDetails.order_reference || payload.order_id.substring(0, 8);
           const totalAmount = (amount / 100).toLocaleString('en-NG');
 
@@ -166,61 +184,23 @@ serve(async (req: Request) => {
             .eq('id', orderDetails.seller_id)
             .maybeSingle();
 
-          const twilioAccountSid = denoEnv?.env.get('TWILIO_ACCOUNT_SID');
-          const twilioAuthToken = denoEnv?.env.get('TWILIO_AUTH_TOKEN');
-          const twilioPhoneNumber = denoEnv?.env.get('TWILIO_PHONE_NUMBER');
-
-          if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
-            const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
-            const authHeader = btoa(`${twilioAccountSid}:${twilioAuthToken}`);
-
-            // Helper function to send SMS
-            const sendSms = async (to: string, message: string) => {
-              let phoneNumber = to.replace(/\s+/g, '').replace(/-/g, '');
-              if (phoneNumber.startsWith('0')) {
-                phoneNumber = '+234' + phoneNumber.substring(1);
-              } else if (phoneNumber.startsWith('234') && !phoneNumber.startsWith('+')) {
-                phoneNumber = '+' + phoneNumber;
-              } else if (!phoneNumber.startsWith('+')) {
-                phoneNumber = '+234' + phoneNumber;
-              }
-
-              const formData = new URLSearchParams();
-              formData.append('To', phoneNumber);
-              formData.append('From', twilioPhoneNumber);
-              formData.append('Body', message);
-
-              try {
-                const smsResponse = await fetch(twilioUrl, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Basic ${authHeader}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: formData.toString(),
-                });
-                const smsResult = await smsResponse.json();
-                console.log(`SMS sent to ${phoneNumber}:`, smsResult.sid || smsResult.error_message);
-                return smsResult;
-              } catch (smsErr) {
-                console.error(`Failed to send SMS to ${phoneNumber}:`, smsErr);
-                return null;
-              }
-            };
-
-            // Send SMS to buyer
+          // Use the centralized send-sms function to send notifications and log them
+          try {
             if (buyerPhone) {
               const buyerMessage = `Hi ${buyerName}! Your payment of ₦${totalAmount} for "${listingTitle}" was successful. Order ref: ${orderRef}. We will notify you when your order is ready for delivery. Thank you for shopping with us!`;
-              await sendSms(buyerPhone, buyerMessage);
+              await supabaseAdmin.functions.invoke('send-sms', {
+                body: { to: buyerPhone, message: buyerMessage, order_id: orderDetails.id, type: 'payment_confirmed' },
+              });
             }
 
-            // Send SMS to seller
             if (sellerProfile?.phone) {
               const sellerMessage = `New order received! Order ref: ${orderRef}. "${listingTitle}" - ₦${totalAmount}. Please prepare the item for pickup. The logistics partner will contact you soon.`;
-              await sendSms(sellerProfile.phone, sellerMessage);
+              await supabaseAdmin.functions.invoke('send-sms', {
+                body: { to: sellerProfile.phone, message: sellerMessage, order_id: orderDetails.id, type: 'order_ready' },
+              });
             }
-          } else {
-            console.log('Twilio credentials not configured, skipping SMS notifications');
+          } catch (notifyErr) {
+            console.error('Failed to invoke send-sms function:', notifyErr);
           }
         }
       } catch (smsError) {
