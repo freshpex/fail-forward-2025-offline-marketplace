@@ -1,3 +1,6 @@
 node_modules/
 .env
 .vercel
+sw.js
+dev-dist/workbox-137dedbd.js
+supabase/config.toml

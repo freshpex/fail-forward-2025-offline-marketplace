@@ -9,6 +9,13 @@ interface ListingCardProps {
   showContactButton?: boolean;
 }
 
+const SCHEDULE_LABELS: Record<string, string> = {
+  morning: 'Morning (8AM - 12PM)',
+  afternoon: 'Afternoon (12PM - 4PM)',
+  evening: 'Evening (4PM - 8PM)',
+  flexible: 'Flexible / Contact seller'
+};
+
 export function ListingCard({ listing, showContactButton = true }: ListingCardProps) {
   const isPending = 'localId' in listing;
   const status = listing.status;
@@ -57,6 +64,28 @@ export function ListingCard({ listing, showContactButton = true }: ListingCardPr
             <span className="detail-label">Location:</span>
             <span className="detail-value">{listing.location}</span>
           </div>
+          {'pickup_address' in listing && listing.pickup_address && (
+            <div className="detail-row">
+              <span className="detail-label">Pickup:</span>
+              <span className="detail-value">
+                {listing.pickup_address}
+                {listing.pickup_city ? `, ${listing.pickup_city}` : ''}
+                {listing.pickup_state ? `, ${listing.pickup_state}` : ''}
+              </span>
+            </div>
+          )}
+          {'harvest_date' in listing && listing.harvest_date && (
+            <div className="detail-row">
+              <span className="detail-label">Harvest Ready:</span>
+              <span className="detail-value">{new Date(listing.harvest_date).toLocaleDateString()}</span>
+            </div>
+          )}
+          {'preferred_schedule' in listing && listing.preferred_schedule && (
+            <div className="detail-row">
+              <span className="detail-label">Pickup Window:</span>
+              <span className="detail-value">{SCHEDULE_LABELS[listing.preferred_schedule] ?? listing.preferred_schedule}</span>
+            </div>
+          )}
           {listing.farmer_name && (
             <div className="detail-row">
               <span className="detail-label">Farmer:</span>
@@ -67,6 +96,12 @@ export function ListingCard({ listing, showContactButton = true }: ListingCardPr
             <span className="detail-label">Contact:</span>
             <span className="detail-value phone">{listing.contact_phone}</span>
           </div>
+          {'seller_verified' in listing && listing.seller_verified && (
+            <div className="detail-row">
+              <span className="detail-label">Verification:</span>
+              <span className="detail-value verified">Verified Seller ✅</span>
+            </div>
+          )}
         </div>
 
         {showContactButton && isFullListing && (
@@ -79,7 +114,7 @@ export function ListingCard({ listing, showContactButton = true }: ListingCardPr
               className="contact-seller-btn"
               onClick={() => setShowModal(true)}
             >
-              📞 Contact Seller
+             View
             </button>
           </>
         )}

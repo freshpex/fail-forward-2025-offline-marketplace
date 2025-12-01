@@ -5,6 +5,7 @@ import { Select } from '../components/Select';
 import { Button } from '../components/Button';
 import { ButtonSpinner } from '../components/ButtonSpinner';
 import { ImageUpload } from '../components/ImageUpload';
+import { PhoneNumberInput } from '../components/PhoneNumberInput';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { createListing, fetchPrices } from '../services/api';
 import { addPendingListing, cachePrices, getCachedPrices } from '../services/db';
@@ -18,6 +19,13 @@ const UNITS = [
   { value: 'crates', label: 'Crates' },
   { value: 'bundles', label: 'Bundles' },
   { value: 'pieces', label: 'Pieces' }
+];
+
+const SCHEDULE_OPTIONS = [
+  { value: 'morning', label: 'Morning (8AM - 12PM)' },
+  { value: 'afternoon', label: 'Afternoon (12PM - 4PM)' },
+  { value: 'evening', label: 'Evening (4PM - 8PM)' },
+  { value: 'flexible', label: 'Flexible / Contact me to arrange' }
 ];
 
 export function CreateListing() {
@@ -37,7 +45,12 @@ export function CreateListing() {
     contact_phone: '',
     contact_email: '',
     farmer_name: '',
-    image_url: ''
+    image_url: '',
+    pickup_address: '',
+    pickup_city: '',
+    pickup_state: '',
+    harvest_date: '',
+    preferred_schedule: ''
   });
 
   useEffect(() => {
@@ -87,7 +100,12 @@ export function CreateListing() {
         contact_phone: formData.contact_phone,
         contact_email: formData.contact_email || undefined,
         farmer_name: formData.farmer_name || undefined,
-        image_url: formData.image_url || undefined
+        image_url: formData.image_url || undefined,
+        pickup_address: formData.pickup_address || undefined,
+        pickup_city: formData.pickup_city || undefined,
+        pickup_state: formData.pickup_state || undefined,
+        harvest_date: formData.harvest_date || undefined,
+        preferred_schedule: formData.preferred_schedule || undefined
       };
 
       if (isOnline) {
@@ -115,7 +133,12 @@ export function CreateListing() {
         contact_phone: '',
         contact_email: '',
         farmer_name: '',
-        image_url: ''
+        image_url: '',
+        pickup_address: '',
+        pickup_city: '',
+        pickup_state: '',
+        harvest_date: '',
+        preferred_schedule: ''
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create listing');
@@ -197,7 +220,7 @@ export function CreateListing() {
         )}
 
         <Input
-          label="Location"
+          label="General Location"
           type="text"
           required
           value={formData.location}
@@ -206,12 +229,56 @@ export function CreateListing() {
         />
 
         <Input
+          label="Pickup Address"
+          type="text"
+          required
+          value={formData.pickup_address}
+          onChange={(e) => setFormData({ ...formData, pickup_address: e.target.value })}
+          placeholder="House number, street name"
+        />
+
+        <div className="form-row">
+          <Input
+            label="City"
+            type="text"
+            required
+            value={formData.pickup_city}
+            onChange={(e) => setFormData({ ...formData, pickup_city: e.target.value })}
+            placeholder="e.g., Ikeja"
+          />
+
+          <Input
+            label="State"
+            type="text"
+            required
+            value={formData.pickup_state}
+            onChange={(e) => setFormData({ ...formData, pickup_state: e.target.value })}
+            placeholder="e.g., Lagos"
+          />
+        </div>
+
+        <div className="form-row">
+          <Input
+            label="Expected Harvest Date"
+            type="date"
+            value={formData.harvest_date}
+            onChange={(e) => setFormData({ ...formData, harvest_date: e.target.value })}
+          />
+
+          <Select
+            label="Preferred Pickup Schedule"
+            options={SCHEDULE_OPTIONS}
+            value={formData.preferred_schedule}
+            onChange={(e) => setFormData({ ...formData, preferred_schedule: e.target.value })}
+          />
+        </div>
+
+        <PhoneNumberInput
           label="Contact Phone"
-          type="tel"
           required
           value={formData.contact_phone}
-          onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-          placeholder="+234 9054531822"
+          onChange={(value) => setFormData({ ...formData, contact_phone: value })}
+          placeholder="Enter phone number"
         />
 
         <Input
