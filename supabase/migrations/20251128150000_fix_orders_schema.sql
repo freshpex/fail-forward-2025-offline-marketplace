@@ -20,6 +20,7 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS metadata jsonb;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS order_reference text;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS quantity integer DEFAULT 1;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS produce_price numeric(12,2) DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT timezone('utc', now());
 
 -- Make buyer_id nullable to allow guest checkout
 DO $$

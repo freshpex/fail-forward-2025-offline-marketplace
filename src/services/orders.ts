@@ -108,11 +108,17 @@ async function invokeFunction<T>(name: string, body: Record<string, unknown>): P
        try {
          const details = await (error.context as Response).json();
          console.error('Error details:', details);
+         if (details.details) {
+            throw new Error(`${details.error}: ${details.details}`);
+         }
          if (details.error) {
             throw new Error(details.error);
          }
        } catch (e) {
-         // ignore
+         // ignore if we can't parse JSON
+         if (e instanceof Error && e.message && !e.message.includes('JSON')) {
+           throw e;
+         }
        }
     }
     throw new Error(error.message ?? `Failed to execute ${name}`);
