@@ -147,29 +147,30 @@ export function PaymentSettings() {
     setSaving(true);
     try {
       const bankLabel = NIGERIAN_BANKS.find(b => b.value === bankCode)?.label || '';
-      
-      const accountData = {
-        user_id: user.id,
-        bank_name: bankLabel,
-        account_number: accountNumber,
-        account_name: accountName,
-        updated_at: new Date().toISOString(),
-      };
 
       let result;
       if (existingAccount) {
-        // Update existing account
+        // Update existing account - don't include user_id or timestamps
         result = await supabase
           .from('seller_payment_accounts')
-          .update(accountData)
+          .update({
+            bank_name: bankLabel,
+            account_number: accountNumber,
+            account_name: accountName,
+          })
           .eq('id', existingAccount.id)
           .select()
           .single();
       } else {
-        // Insert new account
+        // Insert new account - only include required fields
         result = await supabase
           .from('seller_payment_accounts')
-          .insert(accountData)
+          .insert({
+            user_id: user.id,
+            bank_name: bankLabel,
+            account_number: accountNumber,
+            account_name: accountName,
+          })
           .select()
           .single();
       }

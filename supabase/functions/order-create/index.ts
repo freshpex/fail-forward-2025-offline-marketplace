@@ -89,7 +89,7 @@ serve(async (req: Request) => {
 
     const { data: listing, error: listingError } = await supabaseAdmin
       .from('listings')
-      .select('id, seller_id, user_id, price, unit, crop, location, pickup_address')
+      .select('id, seller_id, user_id, price, unit, package_type, measurement_unit, measurement_value, unit_description, crop, location, pickup_address')
       .eq('id', payload.listing_id)
       .maybeSingle();
 
@@ -150,6 +150,10 @@ serve(async (req: Request) => {
         crop: listing.crop,
         unit_price: listing.price,
         unit: listing.unit,
+        package_type: (listing as any).package_type ?? listing.unit,
+        measurement_unit: (listing as any).measurement_unit ?? null,
+        measurement_value: (listing as any).measurement_value ?? null,
+        unit_description: (listing as any).unit_description ?? null,
         quantity,
         buyer_name: payload.manual_details?.buyer_name ?? null,
         buyer_phone: payload.manual_details?.buyer_phone ?? null,

@@ -51,9 +51,20 @@ export function ListingCard({ listing, showContactButton = true }: ListingCardPr
         </div>
         <div className="listing-details">
           <div className="detail-row">
-            <span className="detail-label">Quantity:</span>
-            <span className="detail-value">{listing.quantity} {listing.unit}</span>
+            <span className="detail-label">Available:</span>
+            <span className="detail-value">
+              {listing.quantity} {listing.unit}
+              {listing.measurement_value && listing.measurement_unit && (
+                <span className="package-size"> ({listing.measurement_value} {listing.measurement_unit} each)</span>
+              )}
+            </span>
           </div>
+          {listing.unit_description && (
+            <div className="detail-row">
+              <span className="detail-label">Notes:</span>
+              <span className="detail-value">{listing.unit_description}</span>
+            </div>
+          )}
           {listing.price && (
             <div className="detail-row">
               <span className="detail-label">Price:</span>

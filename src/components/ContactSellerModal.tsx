@@ -458,9 +458,15 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
             <h3>{listing.crop}</h3>
             <p className="product-meta">
               {listing.quantity} {listing.unit}
+              {listing.measurement_value && listing.measurement_unit && (
+                <span className="package-size"> ({listing.measurement_value} {listing.measurement_unit} each)</span>
+              )}
               {listing.location && ` • ${listing.location}`}
               {listing.price && ` • ₦${listing.price.toLocaleString()}`}
             </p>
+            {listing.unit_description && (
+              <p className="product-notes">{listing.unit_description}</p>
+            )}
           </div>
 
           {(step === 'contact' || step === 'delivery') && (

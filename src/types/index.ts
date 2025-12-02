@@ -3,6 +3,10 @@ export interface Listing {
   crop: string;
   quantity: number;
   unit: string;
+  package_type?: string | null;
+  measurement_unit?: string | null;
+  measurement_value?: number | null;
+  unit_description?: string | null;
   price?: number | null;
   location: string;
   contact_phone: string;
@@ -27,6 +31,10 @@ export interface NewListing {
   crop: string;
   quantity: number;
   unit: string;
+  package_type?: string;
+  measurement_unit?: string;
+  measurement_value?: number | null;
+  unit_description?: string;
   price?: number | null;
   location: string;
   contact_phone: string;

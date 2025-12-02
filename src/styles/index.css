@@ -193,6 +193,25 @@ h2 {
   box-shadow: 0 4px 12px var(--shadow);
 }
 
+.form-section-label {
+  margin: 1.5rem 0 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+}
+
+.form-section-label strong {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.form-section-label .helper-text {
+  display: block;
+  color: var(--text-light);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
 .form-group {
   margin-bottom: 1.5rem;
 }
@@ -445,6 +464,12 @@ h2 {
 .detail-value.verified {
   color: var(--success);
   font-weight: 600;
+}
+
+.package-size {
+  font-weight: 400;
+  color: var(--text-light);
+  font-size: 0.875em;
 }
 
 .price-reference {
@@ -2727,6 +2752,13 @@ h2 {
 .product-meta {
   color: var(--text-light);
   font-size: 0.9375rem;
+}
+
+.product-notes {
+  color: var(--text-light);
+  font-size: 0.875rem;
+  margin-top: 0.375rem;
+  font-style: italic;
 }
 
 .seller-info-section {

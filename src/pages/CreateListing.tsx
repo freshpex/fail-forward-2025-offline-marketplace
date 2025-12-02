@@ -13,13 +13,33 @@ import { supabase } from '../services/supabase';
 import { NewListing, PendingListing, ReferencePrice } from '../types';
 import { formatNairaSimple } from '../utils/currency';
 
-const UNITS = [
-  { value: 'kg', label: 'Kilograms (kg)' },
-  { value: 'tons', label: 'Tons' },
+const PACKAGE_TYPES = [
   { value: 'bags', label: 'Bags' },
+  { value: 'sacks', label: 'Sacks' },
   { value: 'crates', label: 'Crates' },
+  { value: 'jerry cans', label: 'Jerry Cans' },
+  { value: 'drums', label: 'Drums' },
+  { value: 'buckets', label: 'Buckets' },
+  { value: 'baskets', label: 'Baskets' },
   { value: 'bundles', label: 'Bundles' },
-  { value: 'pieces', label: 'Pieces' }
+  { value: 'bunches', label: 'Bunches' },
+  { value: 'pieces', label: 'Loose Pieces' },
+  { value: 'kg', label: 'Sold by weight (kg)' },
+  { value: 'liters', label: 'Sold by volume (liters)' },
+  { value: 'tons', label: 'Sold in tons' },
+  { value: 'custom', label: 'Other (specify)' }
+];
+
+const MEASUREMENT_UNITS = [
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'g', label: 'Grams (g)' },
+  { value: 'tons', label: 'Tons' },
+  { value: 'liters', label: 'Liters (L)' },
+  { value: 'ml', label: 'Milliliters (ml)' },
+  { value: 'pieces', label: 'Pieces / Units' },
+  { value: 'bottles', label: 'Bottles' },
+  { value: 'sachets', label: 'Sachets' },
+  { value: 'custom', label: 'Custom unit' }
 ];
 
 const SCHEDULE_OPTIONS = [
@@ -47,6 +67,11 @@ export function CreateListing() {
     crop: '',
     quantity: '',
     unit: '',
+    custom_unit: '',
+    measurement_unit: '',
+    custom_measurement_unit: '',
+    measurement_value: '',
+    unit_description: '',
     price: '',
     location: '',
     contact_phone: '',
@@ -79,7 +104,24 @@ export function CreateListing() {
           setFormData({
             crop: data.crop || '',
             quantity: data.quantity?.toString() || '',
-            unit: data.unit || '',
+            unit: PACKAGE_TYPES.some((option) => option.value === data.unit)
+              ? data.unit
+              : data.unit
+              ? 'custom'
+              : '',
+            custom_unit: PACKAGE_TYPES.some((option) => option.value === data.unit)
+              ? ''
+              : data.unit || '',
+            measurement_unit: MEASUREMENT_UNITS.some((option) => option.value === data.measurement_unit)
+              ? data.measurement_unit ?? ''
+              : data.measurement_unit
+              ? 'custom'
+              : '',
+            custom_measurement_unit: MEASUREMENT_UNITS.some((option) => option.value === data.measurement_unit)
+              ? ''
+              : data.measurement_unit || '',
+            measurement_value: data.measurement_value?.toString() || '',
+            unit_description: data.unit_description || '',
             price: data.price?.toString() || '',
             location: data.location || '',
             contact_phone: data.contact_phone || '',
@@ -127,10 +169,20 @@ export function CreateListing() {
   const getRelevantPrices = () => {
     if (!formData.crop) return [];
 
-    return referencePrices.filter(price =>
-      price.crop.toLowerCase().includes(formData.crop.toLowerCase()) &&
-      price.unit === formData.unit
-    ).slice(0, 3);
+    const selectedMeasurement = formData.measurement_unit === 'custom'
+      ? formData.custom_measurement_unit
+      : formData.measurement_unit;
+    const normalizedUnit = (selectedMeasurement || formData.custom_measurement_unit || formData.unit || '')
+      .toLowerCase()
+      .trim();
+
+    return referencePrices.filter(price => {
+      const priceUnit = (price.unit || '').toLowerCase().trim();
+      return (
+        price.crop.toLowerCase().includes(formData.crop.toLowerCase()) &&
+        (!normalizedUnit || priceUnit === normalizedUnit)
+      );
+    }).slice(0, 3);
   };
 
   const relevantPrices = getRelevantPrices();
@@ -142,10 +194,20 @@ export function CreateListing() {
     setSuccess(false);
 
     try {
+      // Determine the actual package type and measurement unit
+      const resolvedUnit = formData.unit === 'custom' ? formData.custom_unit : formData.unit;
+      const resolvedMeasurementUnit = formData.measurement_unit === 'custom'
+        ? formData.custom_measurement_unit
+        : formData.measurement_unit;
+
       const listingData: NewListing = {
         crop: formData.crop,
         quantity: parseFloat(formData.quantity),
-        unit: formData.unit,
+        unit: resolvedUnit,
+        package_type: resolvedUnit,
+        measurement_unit: resolvedMeasurementUnit || undefined,
+        measurement_value: formData.measurement_value ? parseFloat(formData.measurement_value) : null,
+        unit_description: formData.unit_description || undefined,
         price: formData.price ? parseFloat(formData.price) : null,
         location: formData.location,
         contact_phone: formData.contact_phone,
@@ -188,6 +250,11 @@ export function CreateListing() {
           crop: '',
           quantity: '',
           unit: '',
+            custom_unit: '',
+            measurement_unit: '',
+            custom_measurement_unit: '',
+            measurement_value: '',
+            unit_description: '',
           price: '',
           location: '',
           contact_phone: '',
@@ -245,24 +312,78 @@ export function CreateListing() {
 
         <div className="form-row">
           <Input
-            label="Quantity"
+            label="Quantity Available"
             type="number"
             required
-            min="0.01"
-            step="0.01"
+            min="1"
+            step="1"
             value={formData.quantity}
             onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-            placeholder="0"
+            placeholder="e.g., 50"
           />
 
           <Select
-            label="Unit"
+            label="Package Type"
             required
-            options={UNITS}
+            options={PACKAGE_TYPES}
             value={formData.unit}
             onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
           />
         </div>
+
+        {formData.unit === 'custom' && (
+          <Input
+            label="Custom Package Type"
+            type="text"
+            required
+            value={formData.custom_unit}
+            onChange={(e) => setFormData({ ...formData, custom_unit: e.target.value })}
+            placeholder="e.g., wheelbarrows, paint buckets"
+          />
+        )}
+
+        <div className="form-section-label">
+          <strong>What does each package contain?</strong>
+          <span className="helper-text">Helps buyers know the exact size</span>
+        </div>
+
+        <div className="form-row">
+          <Input
+            label="Amount per Package"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={formData.measurement_value}
+            onChange={(e) => setFormData({ ...formData, measurement_value: e.target.value })}
+            placeholder="e.g., 50"
+          />
+
+          <Select
+            label="Measurement Unit"
+            options={MEASUREMENT_UNITS}
+            value={formData.measurement_unit}
+            onChange={(e) => setFormData({ ...formData, measurement_unit: e.target.value })}
+          />
+        </div>
+
+        {formData.measurement_unit === 'custom' && (
+          <Input
+            label="Custom Measurement Unit"
+            type="text"
+            required
+            value={formData.custom_measurement_unit}
+            onChange={(e) => setFormData({ ...formData, custom_measurement_unit: e.target.value })}
+            placeholder="e.g., tubers, heads, fingers"
+          />
+        )}
+
+        <Input
+          label="Additional Description (Optional)"
+          type="text"
+          value={formData.unit_description}
+          onChange={(e) => setFormData({ ...formData, unit_description: e.target.value })}
+          placeholder="e.g., Grade A, freshly harvested, medium-sized"
+        />
 
         <Input
           label="Price per Unit"
