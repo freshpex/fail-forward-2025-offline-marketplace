@@ -170,6 +170,7 @@ export function PaymentSettings() {
             bank_name: bankLabel,
             account_number: accountNumber,
             account_name: accountName,
+            account_type: 'nuban',
           })
           .select()
           .single();
