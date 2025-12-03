@@ -14,6 +14,8 @@ import { MyListings } from './pages/MyListings';
 import { GetStarted } from './pages/GetStarted';
 import { PaymentSettings } from './pages/PaymentSettings';
 import { Escrow } from './pages/Escrow';
+import { TrackOrder } from './pages/TrackOrder';
+import { SellerOrders } from './pages/SellerOrders';
 
 function App() {
   return (
@@ -25,6 +27,7 @@ function App() {
           <Route path="install" element={<InstallGuide />} />
           <Route path="investors" element={<Investors />} />
           <Route path="get-started" element={<GetStarted />} />
+          <Route path="track-order" element={<TrackOrder />} />
           <Route path="signup" element={<Signup />} />
           <Route path="login" element={<Login />} />
 
@@ -65,6 +68,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <PaymentSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="seller-orders"
+            element={
+              <ProtectedRoute>
+                <SellerOrders />
               </ProtectedRoute>
             }
           />

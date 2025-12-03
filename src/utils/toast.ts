@@ -38,6 +38,35 @@ export const showLoading = (message: string) => {
   });
 };
 
+export const showWarning = (message: string) => {
+  toast(message, {
+    duration: 5000,
+    position: 'top-right',
+    icon: '⚠️',
+    style: {
+      background: '#f59e0b',
+      color: '#fff',
+      borderRadius: '8px',
+      padding: '16px',
+    },
+  });
+};
+
+export const showInfo = (message: string) => {
+  toast(message, {
+    duration: 4000,
+    position: 'top-right',
+    icon: 'ℹ️',
+    style: {
+      background: '#3b82f6',
+      color: '#fff',
+      borderRadius: '8px',
+      padding: '16px',
+    },
+  });
+};
+
 export const dismissToast = (toastId: string) => {
   toast.dismiss(toastId);
 };
+

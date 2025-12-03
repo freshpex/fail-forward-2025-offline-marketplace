@@ -1,4 +1,4 @@
-import { Listing, NewListing, ReferencePrice } from '../types';
+import { Listing, NewListing, ReferencePrice, SellerProfile } from '../types';
 import { supabase } from './supabase';
 
 export interface NewPurchaseInterest {
@@ -8,11 +8,17 @@ export interface NewPurchaseInterest {
 }
 
 export async function createListing(listing: NewListing): Promise<Listing> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data, error } = await supabase
     .from('listings')
     .insert([{
       ...listing,
-      status: 'synced'
+      status: 'synced',
+      seller_id: listing.seller_id ?? user?.id ?? null,
+      user_id: user?.id
     }])
     .select()
     .single();
@@ -47,6 +53,62 @@ export async function fetchListings(filters?: { crop?: string; location?: string
   }
 
   return (data || []) as Listing[];
+}
+
+export async function updateListing(listingId: string, updates: Partial<NewListing>): Promise<Listing> {
+  const { data, error } = await supabase
+    .from('listings')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', listingId)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('Error updating listing:', error);
+    throw new Error(error.message || 'Failed to update listing');
+  }
+
+  return data as Listing;
+}
+
+export async function deleteListing(listingId: string): Promise<void> {
+  const { error } = await supabase
+    .from('listings')
+    .delete()
+    .eq('id', listingId);
+
+  if (error) {
+    console.error('Error deleting listing:', error);
+    throw new Error(error.message || 'Failed to delete listing');
+  }
+}
+
+export async function fetchListingsBySeller(userId: string): Promise<Listing[]> {
+  const { data, error } = await supabase
+    .from('listings')
+    .select(`
+      *,
+      seller_profile:profiles!listings_seller_id_fkey(
+        id,
+        full_name,
+        phone,
+        role,
+        seller_verified
+      )
+    `)
+    .eq('seller_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching seller listings:', error);
+    throw new Error(error.message || 'Failed to fetch listings');
+  }
+
+  return (data || []).map((listing) => ({
+    ...listing,
+    seller_profile: listing.seller_profile as SellerProfile | null,
+    seller_verified: (listing.seller_profile as SellerProfile | null)?.seller_verified ?? false,
+  })) as Listing[];
 }
 
 export async function fetchPrices(filters?: { crop?: string; region?: string }): Promise<ReferencePrice[]> {
