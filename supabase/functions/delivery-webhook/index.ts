@@ -3,9 +3,17 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createSupabaseClients } from '../_shared/supabaseClient.ts';
 import { errorResponse, jsonResponse } from '../_shared/response.ts';
 
-interface ShipbubbleWebhookPayload {
+// Terminal Africa webhook payload structure
+// Docs: https://docs.terminal.africa/webhooks
+interface TerminalAfricaWebhookPayload {
   event?: string;
-  data?: Record<string, any>;
+  data?: {
+    shipment_id?: string;
+    tracking_number?: string;
+    status?: string;
+    carrier?: string;
+    [key: string]: any;
+  };
 }
 
 serve(async (req: Request) => {
@@ -13,31 +21,38 @@ serve(async (req: Request) => {
     return errorResponse(405, 'Method not allowed');
   }
 
-  let payload: ShipbubbleWebhookPayload;
+  let payload: TerminalAfricaWebhookPayload;
   try {
     payload = await req.json();
   } catch (_err) {
     return errorResponse(400, 'Invalid JSON payload');
   }
 
-  // Attempt to extract tracking number and status from common locations
-  const trackingNumber = payload.data?.tracking_number ?? payload.data?.shipment?.tracking_number ?? payload.data?.data?.tracking_number;
-  const status = payload.data?.status ?? payload.data?.shipment?.status ?? payload.data?.current_status ?? payload.event;
+  // Extract tracking info from Terminal Africa webhook payload
+  const trackingNumber = payload.data?.tracking_number ?? payload.data?.shipment_id;
+  const status = payload.data?.status ?? payload.event;
+  const shipmentId = payload.data?.shipment_id;
 
-  if (!trackingNumber) {
-    console.warn('Webhook received without tracking number', payload);
-    return jsonResponse({ ok: false, message: 'No tracking number in payload' });
+  if (!trackingNumber && !shipmentId) {
+    console.warn('Webhook received without tracking number or shipment ID', payload);
+    return jsonResponse({ ok: false, message: 'No tracking number or shipment ID in payload' });
   }
 
   try {
     const { supabaseAdmin } = createSupabaseClients(req);
 
-    // Find shipment by tracking number
-    const { data: shipment } = await supabaseAdmin
+    // Find shipment by tracking number or shipment ID
+    let shipmentQuery = supabaseAdmin
       .from('shipments')
-      .select('id, order_id, tracking_number, status')
-      .eq('tracking_number', trackingNumber)
-      .maybeSingle();
+      .select('id, order_id, tracking_number, status');
+    
+    if (trackingNumber) {
+      shipmentQuery = shipmentQuery.eq('tracking_number', trackingNumber);
+    } else if (shipmentId) {
+      shipmentQuery = shipmentQuery.eq('tracking_number', shipmentId);
+    }
+    
+    const { data: shipment } = await shipmentQuery.maybeSingle();
 
     if (!shipment) {
       console.warn('No shipment found for tracking number', trackingNumber);

@@ -1,36 +1,175 @@
 // @deno-types="https://deno.land/std@0.224.0/http/server.ts"
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createSupabaseClients } from '../_shared/supabaseClient.ts';
-import { ensureRole, getUserContext } from '../_shared/auth.ts';
+import { getUserContext } from '../_shared/auth.ts';
 import { errorResponse, jsonResponse } from '../_shared/response.ts';
 
 interface DeliveryBookRequest {
-  order_id?: string;
-  rate_id?: string;
-  shipment_details?: Record<string, unknown>;
+  rate_id: string;
+  order_id: string;
+  sender: {
+    name: string;
+    phone: string;
+    email?: string;
+    address: string;
+    city: string;
+    state: string;
+    country?: string;
+  };
+  receiver: {
+    name: string;
+    phone: string;
+    email?: string;
+    address: string;
+    city: string;
+    state: string;
+    country?: string;
+  };
+  parcel: {
+    weight: number;
+    length: number;
+    width: number;
+    height: number;
+    description?: string;
+  };
 }
 
-const SHIPBUBBLE_SHIPMENTS_URL = 'https://api.shipbubble.com/v1/shipments';
+// Terminal Africa API helper
+async function terminalRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+  const apiKey = Deno.env.get('TERMINAL_AFRICA_API_KEY');
+  if (!apiKey) {
+    throw new Error('Terminal Africa API key not configured');
+  }
+
+  const baseUrl = 'https://api.terminal.africa/v1';
+  const response = await fetch(`${baseUrl}${endpoint}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Terminal Africa returned non-JSON response: ${text.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || data.error || `Terminal Africa API error: ${response.status}`);
+  }
+
+  return data;
+}
+
+// Create address in Terminal Africa
+async function createAddress(addressData: DeliveryBookRequest['sender'] | DeliveryBookRequest['receiver']): Promise<string> {
+  // Parse address into components
+  const nameParts = addressData.name.split(' ');
+  const firstName = nameParts[0] || 'Customer';
+  const lastName = nameParts.slice(1).join(' ') || 'Customer';
+
+  const payload = {
+    first_name: firstName,
+    last_name: lastName,
+    email: addressData.email || 'customer@example.com',
+    phone: addressData.phone,
+    line1: addressData.address,
+    city: addressData.city,
+    state: addressData.state,
+    country: addressData.country || 'NG',
+    is_residential: true,
+  };
+
+  const result = await terminalRequest('/addresses', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return result.data.address_id;
+}
+
+// Create parcel in Terminal Africa
+async function createParcel(parcelData: DeliveryBookRequest['parcel']): Promise<string> {
+  const payload = {
+    description: parcelData.description || 'Agricultural produce',
+    packaging: 'box',
+    weight: parcelData.weight,
+    items: [
+      {
+        name: parcelData.description || 'Agricultural produce',
+        description: parcelData.description || 'Fresh farm produce',
+        currency: 'NGN',
+        value: 5000,
+        quantity: 1,
+        weight: parcelData.weight,
+      }
+    ],
+  };
+
+  const result = await terminalRequest('/parcels', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return result.data.parcel_id;
+}
+
+// Book shipment with Terminal Africa
+async function bookShipment(
+  pickupAddressId: string,
+  deliveryAddressId: string,
+  parcelId: string,
+  rateId: string
+): Promise<any> {
+  const payload = {
+    rate_id: rateId,
+    pickup_address: pickupAddressId,
+    delivery_address: deliveryAddressId,
+    parcel: parcelId,
+    shipment_type: 'dropoff',
+    payment_method: 'wallet',
+    metadata: {
+      source: 'agric-marketplace',
+    },
+  };
+
+  const result = await terminalRequest('/shipments', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return result.data;
+}
 
 serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return errorResponse(405, 'Method not allowed');
   }
 
-  const apiKey = (Deno.env.get('SHIPBUBBLE_API_KEY') as string);
-  if (!apiKey) {
-    return errorResponse(500, 'SHIPBUBBLE_API_KEY is not configured');
-  }
-
-  let payload: DeliveryBookRequest;
+  let body: DeliveryBookRequest;
   try {
-    payload = await req.json();
+    body = await req.json();
   } catch (_err) {
     return errorResponse(400, 'Invalid JSON payload');
   }
 
-  if (!payload.order_id || !payload.rate_id) {
-    return errorResponse(400, 'order_id and rate_id are required');
+  // Validate required fields
+  if (!body.rate_id) {
+    return errorResponse(400, 'rate_id is required');
+  }
+  if (!body.order_id) {
+    return errorResponse(400, 'order_id is required');
+  }
+  if (!body.sender || !body.receiver) {
+    return errorResponse(400, 'sender and receiver information is required');
+  }
+  if (!body.parcel) {
+    return errorResponse(400, 'parcel information is required');
   }
 
   try {
@@ -41,126 +180,61 @@ serve(async (req: Request) => {
       return context;
     }
 
-    const roleCheck = ensureRole(context.profile, ['seller', 'admin']);
-    if (roleCheck instanceof Response) {
-      return roleCheck;
-    }
+    console.log('Creating addresses and parcel for shipment booking...');
 
-    const { data: order, error: orderError } = await supabaseAdmin
+    // Create addresses and parcel in parallel
+    const [pickupAddressId, deliveryAddressId, parcelId] = await Promise.all([
+      createAddress(body.sender),
+      createAddress(body.receiver),
+      createParcel(body.parcel),
+    ]);
+
+    console.log('Created resources:', { pickupAddressId, deliveryAddressId, parcelId });
+
+    // Book the shipment
+    const shipment = await bookShipment(
+      pickupAddressId,
+      deliveryAddressId,
+      parcelId,
+      body.rate_id
+    );
+
+    console.log('Shipment booked:', shipment);
+
+    // Update order with shipment details
+    const { error: updateError } = await supabaseAdmin
       .from('orders')
-      .select('id, seller_id, metadata')
-      .eq('id', payload.order_id)
-      .maybeSingle();
-
-    if (orderError) {
-      console.error('Failed to load order', orderError);
-      return errorResponse(500, 'Unable to load order');
-    }
-
-    if (!order) {
-      return errorResponse(404, 'Order not found');
-    }
-
-    if (context.profile?.role !== 'admin' && order.seller_id !== context.user.id) {
-      return errorResponse(403, 'Only the seller can book delivery');
-    }
-
-    const shipmentResponse = await fetch(SHIPBUBBLE_SHIPMENTS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        rate_id: payload.rate_id,
-        ...(payload.shipment_details ?? {}),
-      }),
-    });
-
-    const shipment = await shipmentResponse.json();
-
-    if (!shipmentResponse.ok) {
-      console.error('Shipbubble booking failure', shipment);
-      return errorResponse(
-        shipmentResponse.status,
-        'Failed to book delivery with Shipbubble',
-        shipment
-      );
-    }
-
-    const trackingNumber = shipment?.data?.tracking_number ?? shipment?.tracking_number ?? null;
-
-    const { data: storedShipment, error: storeError } = await supabaseAdmin
-      .from('shipments')
-      .insert({
-        order_id: order.id,
-        tracking_number: trackingNumber,
-        status: 'booked',
-        provider: 'Shipbubble',
-        metadata: shipment,
+      .update({
+        delivery_tracking_id: shipment.shipment_id,
+        delivery_status: 'booked',
+        delivery_carrier: shipment.carrier?.name || 'Terminal Africa',
+        delivery_booked_at: new Date().toISOString(),
       })
-      .select()
-      .maybeSingle();
+      .eq('id', body.order_id);
 
-    if (storeError) {
-      console.error('Failed to store shipment data', storeError);
+    if (updateError) {
+      console.error('Failed to update order:', updateError);
+      // Don't fail the request, shipment is already booked
     }
 
-    const { error: intentUpdate } = await supabaseAdmin
-      .from('shipment_intents')
-      .update({ status: 'booked', response_payload: shipment })
-      .eq('order_id', order.id)
-      .eq('quote_id', payload.rate_id);
-
-    if (intentUpdate) {
-      console.error('Failed to update shipment intent', intentUpdate);
-    }
-
-    await supabaseAdmin
-      .from('orders')
-      .update({ status: 'in_transit', shipping_provider: 'Shipbubble' })
-      .eq('id', order.id);
-
-    // Notify buyer and seller with tracking number via send-sms function
-    try {
-      // Get buyer phone from manual_orders or order metadata
-      const { data: manualOrder } = await supabaseAdmin
-        .from('manual_orders')
-        .select('buyer_phone, buyer_name')
-        .eq('order_id', order.id)
-        .maybeSingle();
-
-      const { data: sellerProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('phone, full_name')
-        .eq('id', order.seller_id)
-        .maybeSingle();
-
-      const buyerPhone = manualOrder?.buyer_phone || (order.metadata as any)?.buyer_phone;
-      const buyerName = manualOrder?.buyer_name || 'Customer';
-
-      const trackingMsgBuyer = `Hi ${buyerName}, your order has been booked with tracking number ${trackingNumber}. We'll update you on the delivery status.`;
-      const trackingMsgSeller = `Order ${order.id} has been booked with tracking number ${trackingNumber}. Please hand over the goods to the logistics partner.`;
-
-      if (buyerPhone) {
-        await supabaseAdmin.functions.invoke('send-sms', {
-          body: { to: buyerPhone, message: trackingMsgBuyer, order_id: order.id, type: 'delivery_booked' },
-        });
-      }
-
-      if (sellerProfile?.phone) {
-        await supabaseAdmin.functions.invoke('send-sms', {
-          body: { to: sellerProfile.phone, message: trackingMsgSeller, order_id: order.id, type: 'delivery_booked' },
-        });
-      }
-    } catch (notifyErr) {
-      console.error('Failed to notify parties about booking:', notifyErr);
-    }
-
-    return jsonResponse({ shipment: storedShipment ?? shipment });
+    return jsonResponse({
+      success: true,
+      shipment: {
+        id: shipment.shipment_id,
+        tracking_id: shipment.tracking_number || shipment.shipment_id,
+        carrier: shipment.carrier?.name || 'Terminal Africa',
+        status: shipment.status || 'booked',
+        pickup_address_id: pickupAddressId,
+        delivery_address_id: deliveryAddressId,
+        parcel_id: parcelId,
+        estimated_delivery: shipment.estimated_delivery || null,
+      },
+    });
   } catch (error) {
-    console.error('delivery-book error', error);
-    return errorResponse(500, 'Unexpected error booking delivery');
+    console.error('Delivery booking error:', error);
+    return errorResponse(
+      500,
+      error instanceof Error ? error.message : 'Failed to book delivery'
+    );
   }
 });
-

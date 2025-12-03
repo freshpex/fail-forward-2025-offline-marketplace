@@ -6,7 +6,9 @@ import { LoadingSpinner } from './LoadingSpinner';
 import { Input } from './Input';
 import { Listing } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { createPurchaseInterest } from '../services/api';
+import { estimatePackage } from '../utils/produceEstimator';
 import { 
   getDeliveryOptions, 
   getDeliveryQuote, 
@@ -67,6 +69,7 @@ function loadPaystackScript(): Promise<void> {
 export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [interestMarked, setInterestMarked] = useState(false);
   const [step, setStep] = useState<'contact' | 'delivery' | 'quote' | 'payment'>('contact');
@@ -137,14 +140,55 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
       maximumFractionDigits: 0,
     }).format(value);
 
+  // Offline delivery options - available without network
+  const offlineDeliveryOptions = [
+    {
+      id: 'manual_pickup',
+      label: 'Manual Pickup / Arrange Yourself',
+      type: 'manual' as const,
+      fee: 0,
+      currency: 'NGN',
+      estimated_timeframe: 'Coordinate directly with the seller',
+      notes: 'Exchange contact details and coordinate pickup or your preferred logistics provider.',
+      available_offline: true,
+    },
+    {
+      id: 'in_app_delivery',
+      label: 'In-App Delivery via Terminal Africa',
+      type: 'in_app' as const,
+      provider: 'Terminal Africa',
+      currency: 'NGN',
+      requires_quote: true,
+      estimated_timeframe: 'Dispatch within 24 hours after seller confirmation',
+      available_offline: false,
+      offline_message: 'You need to be online to use this delivery option. Please connect to the internet to get delivery quotes.',
+    },
+  ];
+
   const loadDeliveryOptions = async () => {
+    // If offline, use cached/static options
+    if (!isOnline) {
+      setDeliveryOptions(offlineDeliveryOptions);
+      return;
+    }
+
     setLoadingOptions(true);
     try {
       const response = await getDeliveryOptions(listing.id);
-      setDeliveryOptions(response.options || []);
+      // Mark online options with availability
+      const options = (response.options || []).map((opt: any) => ({
+        ...opt,
+        available_offline: opt.type === 'manual',
+        offline_message: opt.type === 'in_app' 
+          ? 'You need to be online to use this delivery option. Please connect to the internet to get delivery quotes.'
+          : undefined,
+      }));
+      setDeliveryOptions(options);
     } catch (error) {
       console.error('Error loading delivery options:', error);
-      showError('Failed to load delivery options');
+      // Fallback to offline options on error
+      setDeliveryOptions(offlineDeliveryOptions);
+      showError('Failed to load delivery options. Showing offline options.');
     } finally {
       setLoadingOptions(false);
     }
@@ -178,13 +222,20 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
         manualDetails.delivery_state
       ].filter(Boolean).join(', ') || manualDetails.delivery_address;
 
-      // Estimate weight based on quantity and unit
-      const estimatedWeight = Math.max(1, purchaseQuantity * 0.5); // Assume 0.5kg per unit as default
+      // Smart weight and dimension estimation based on crop type and package
+      const packageEstimate = estimatePackage(
+        listing.crop,
+        listing.unit || 'bags',
+        purchaseQuantity,
+        listing.measurement_value // Use seller-provided weight if available
+      );
+
+      console.log('📦 Package estimate:', packageEstimate);
 
       const quoteResponse = await getDeliveryQuote({
         listing_id: listing.id,
         payload: {
-          // ShipBubble API format
+          // Terminal Africa API format
           sender_address: senderFullAddress,
           sender_name: sellerName,
           sender_phone: sellerPhone,
@@ -195,25 +246,26 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
           receiver_phone: manualDetails.buyer_phone,
           receiver_email: manualDetails.buyer_email || 'buyer@marketplace.com',
           
-          // Package details
+          // Package details - using smart estimates
           pickup_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
           category_id: 5, // Food/Groceries category
           package_items: [{
             name: listing.crop,
-            description: `${listing.crop} - ${purchaseQuantity} ${listing.unit}`,
-            unit_weight: estimatedWeight,
+            description: `${listing.crop} - ${purchaseQuantity} ${listing.unit}${listing.measurement_value ? ` (${listing.measurement_value} ${listing.measurement_unit} each)` : ''}`,
+            unit_weight: packageEstimate.chargeableWeight, // Use chargeable weight for accurate pricing
             unit_amount: unitPrice,
-            quantity: purchaseQuantity,
+            quantity: 1, // We're sending total weight, not per-unit
           }],
           package_dimension: {
-            length: 30,
-            width: 30,
-            height: 20,
+            length: packageEstimate.length,
+            width: packageEstimate.width,
+            height: packageEstimate.height,
           },
           
           // Additional context
           quantity: purchaseQuantity,
           total_value: produceTotal,
+          weight_estimate: packageEstimate, // Include for debugging
         }
       }) as DeliveryQuoteData;
 
@@ -423,7 +475,7 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
         return;
       }
       
-      // Fetch delivery quote from ShipBubble
+      // Fetch delivery quote from Terminal Africa
       fetchDeliveryQuote();
     }
   };
@@ -585,6 +637,15 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
             <>
               <div className="delivery-options-section">
                 <h4>Select Delivery Method</h4>
+
+                {!isOnline && (
+                  <div className="offline-notice">
+                    <div className="notice-icon">📡</div>
+                    <div className="notice-content">
+                      <p><strong>You're currently offline.</strong> Some delivery options may not be available.</p>
+                    </div>
+                  </div>
+                )}
                 
                 {loadingOptions ? (
                   <div className="loading-state">
@@ -595,23 +656,30 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
                   <p>No delivery options available</p>
                 ) : (
                   <div className="delivery-options-list">
-                    {deliveryOptions.map((option) => (
-                      <div
-                        key={option.id}
-                        className={`delivery-option ${selectedDelivery === option.id ? 'selected' : ''}`}
-                        onClick={() => setSelectedDelivery(option.id)}
-                      >
-                        <input
-                          type="radio"
-                          checked={selectedDelivery === option.id}
-                          onChange={() => setSelectedDelivery(option.id)}
-                        />
-                        <div className="option-details">
-                          <strong>{option.label}</strong>
-                          {option.notes && <p className="option-notes">{option.notes}</p>}
+                    {deliveryOptions.map((option) => {
+                      const isDisabled = !isOnline && option.type === 'in_app';
+                      return (
+                        <div
+                          key={option.id}
+                          className={`delivery-option ${selectedDelivery === option.id ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                          onClick={() => !isDisabled && setSelectedDelivery(option.id)}
+                        >
+                          <input
+                            type="radio"
+                            checked={selectedDelivery === option.id}
+                            onChange={() => !isDisabled && setSelectedDelivery(option.id)}
+                            disabled={isDisabled}
+                          />
+                          <div className="option-details">
+                            <strong>{option.label}</strong>
+                            {option.notes && <p className="option-notes">{option.notes}</p>}
+                            {isDisabled && option.offline_message && (
+                              <p className="offline-warning">⚠️ {option.offline_message}</p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

@@ -7,11 +7,10 @@ import { ButtonSpinner } from '../components/ButtonSpinner';
 import { ImageUpload } from '../components/ImageUpload';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { createListing, fetchPrices, updateListing } from '../services/api';
-import { addPendingListing, cachePrices, getCachedPrices } from '../services/db';
+import { createListing, updateListing } from '../services/api';
+import { addPendingListing } from '../services/db';
 import { supabase } from '../services/supabase';
-import { NewListing, PendingListing, ReferencePrice } from '../types';
-import { formatNairaSimple } from '../utils/currency';
+import { NewListing, PendingListing } from '../types';
 
 const PACKAGE_TYPES = [
   { value: 'bags', label: 'Bags' },
@@ -57,7 +56,6 @@ export function CreateListing() {
   const [loadingListing, setLoadingListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [referencePrices, setReferencePrices] = useState<ReferencePrice[]>([]);
   
   // Edit mode
   const listingId = searchParams.get('listingId');
@@ -145,47 +143,6 @@ export function CreateListing() {
     
     loadListing();
   }, [listingId]);
-
-  useEffect(() => {
-    const loadPrices = async () => {
-      try {
-        const prices = isOnline
-          ? await fetchPrices()
-          : await getCachedPrices();
-
-        if (isOnline && prices.length > 0) {
-          await cachePrices(prices);
-        }
-
-        setReferencePrices(prices);
-      } catch (err) {
-        console.error('Failed to load prices:', err);
-      }
-    };
-
-    loadPrices();
-  }, [isOnline]);
-
-  const getRelevantPrices = () => {
-    if (!formData.crop) return [];
-
-    const selectedMeasurement = formData.measurement_unit === 'custom'
-      ? formData.custom_measurement_unit
-      : formData.measurement_unit;
-    const normalizedUnit = (selectedMeasurement || formData.custom_measurement_unit || formData.unit || '')
-      .toLowerCase()
-      .trim();
-
-    return referencePrices.filter(price => {
-      const priceUnit = (price.unit || '').toLowerCase().trim();
-      return (
-        price.crop.toLowerCase().includes(formData.crop.toLowerCase()) &&
-        (!normalizedUnit || priceUnit === normalizedUnit)
-      );
-    }).slice(0, 3);
-  };
-
-  const relevantPrices = getRelevantPrices();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -394,23 +351,6 @@ export function CreateListing() {
           onChange={(e) => setFormData({ ...formData, price: e.target.value })}
           placeholder="e.g., 12500"
         />
-
-        {relevantPrices.length > 0 && (
-          <div className="price-reference">
-            <h4 className="price-reference-title">Reference Prices:</h4>
-            <div className="price-reference-list">
-              {relevantPrices.map((price) => (
-                <div key={price.id} className="price-reference-item">
-                  <span className="price-reference-region">{price.region}</span>
-                  <span className="price-reference-amount">{formatNairaSimple(price.price)}/{price.unit}</span>
-                </div>
-              ))}
-            </div>
-            <p className="price-reference-note">
-              {isOnline ? 'Latest market prices' : 'Cached prices (offline)'}
-            </p>
-          </div>
-        )}
 
         <Input
           label="General Location"

@@ -3545,6 +3545,17 @@ h2 {
   background: #f0f7f0;
 }
 
+.delivery-option.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #f5f5f5;
+}
+
+.delivery-option.disabled:hover {
+  border-color: var(--border);
+  transform: none;
+}
+
 .delivery-option input[type="radio"] {
   margin-top: 0.25rem;
 }
@@ -3556,6 +3567,36 @@ h2 {
 .option-details strong {
   display: block;
   margin-bottom: 0.25rem;
+}
+
+.offline-warning {
+  color: #b45309;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #fef3c7;
+  border-radius: 4px;
+  border-left: 3px solid #f59e0b;
+}
+
+.offline-notice {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fef3c7;
+  border-radius: 8px;
+  border: 1px solid #fcd34d;
+  margin-bottom: 1rem;
+}
+
+.offline-notice .notice-icon {
+  font-size: 1.25rem;
+}
+
+.offline-notice .notice-content p {
+  margin: 0;
+  color: #92400e;
+  font-size: 0.9rem;
 }
 
 .option-fee {

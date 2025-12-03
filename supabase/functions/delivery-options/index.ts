@@ -85,12 +85,13 @@ serve(async (req: Request) => {
       },
       {
         id: 'in_app_delivery',
-        label: 'In-App Delivery via Shipbubble',
+        label: 'In-App Delivery via Terminal Africa',
         type: 'in_app' as const,
-        provider: 'Shipbubble',
+        provider: 'TerminalAfrica',
         currency: 'NGN',
         requires_quote: true,
         estimated_timeframe: 'Dispatch within 24 hours after seller confirmation',
+        carriers: ['DHL', 'FedEx', 'GIG', 'Kwik', 'UPS', 'and more'],
       },
     ];
 

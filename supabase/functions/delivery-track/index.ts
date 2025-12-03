@@ -7,9 +7,35 @@ import { errorResponse, jsonResponse } from '../_shared/response.ts';
 interface DeliveryTrackRequest {
   order_id?: string;
   tracking_number?: string;
+  shipment_id?: string;
 }
 
-const SHIPBUBBLE_TRACK_URL = 'https://api.shipbubble.com/v1/shipments/track/';
+const TERMINAL_AFRICA_BASE_URL = 'https://api.terminal.africa/v1';
+
+// Terminal Africa API helper
+async function terminalRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+  const apiKey = Deno.env.get('TERMINAL_AFRICA_API_KEY');
+  if (!apiKey) {
+    throw new Error('Terminal Africa API key not configured');
+  }
+
+  const response = await fetch(`${TERMINAL_AFRICA_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Terminal Africa returned non-JSON response: ${text.substring(0, 200)}`);
+  }
+
+  return await response.json();
+}
 
 serve(async (req: Request) => {
   if (req.method !== 'POST') {
@@ -23,8 +49,8 @@ serve(async (req: Request) => {
     return errorResponse(400, 'Invalid JSON payload');
   }
 
-  if (!payload.order_id && !payload.tracking_number) {
-    return errorResponse(400, 'Provide order_id or tracking_number');
+  if (!payload.order_id && !payload.tracking_number && !payload.shipment_id) {
+    return errorResponse(400, 'Provide order_id, tracking_number, or shipment_id');
   }
 
   try {
@@ -37,7 +63,7 @@ serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, buyer_id, seller_id')
+      .select('id, buyer_id, seller_id, delivery_tracking_id')
       .eq('id', payload.order_id ?? '')
       .maybeSingle();
 
@@ -71,39 +97,51 @@ serve(async (req: Request) => {
       return errorResponse(404, 'Shipment not found');
     }
 
-    const apiKey = (Deno.env.get('SHIPBUBBLE_API_KEY') as string);
-    if (!apiKey) {
-      return errorResponse(500, 'SHIPBUBBLE_API_KEY is not configured');
+    // Get shipment ID from shipment record, order, or payload
+    const shipmentId = payload.shipment_id ?? shipment.tracking_number ?? order?.delivery_tracking_id;
+    if (!shipmentId) {
+      return errorResponse(422, 'Shipment is missing tracking/shipment ID');
     }
 
-    const trackingNumber = payload.tracking_number ?? shipment.tracking_number;
-    if (!trackingNumber) {
-      return errorResponse(422, 'Shipment is missing tracking number');
+    // Track shipment via Terminal Africa
+    const trackingResult = await terminalRequest(`/shipments/${shipmentId}/track`);
+
+    if (!trackingResult || trackingResult.error) {
+      console.error('Terminal Africa tracking failure', trackingResult);
+      return errorResponse(500, 'Tracking lookup failed', trackingResult);
     }
 
-    const trackResponse = await fetch(`${SHIPBUBBLE_TRACK_URL}${trackingNumber}`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
+    const trackingData = trackingResult.data || trackingResult;
+    const latestStatus = trackingData?.status ?? trackingData?.current_status ?? shipment.status;
 
-    const tracking = await trackResponse.json();
-
-    if (!trackResponse.ok) {
-      console.error('Shipbubble tracking failure', tracking);
-      return errorResponse(trackResponse.status, 'Tracking lookup failed', tracking);
+    // Map Terminal Africa status to internal status
+    let mappedStatus = latestStatus;
+    const normalized = String(latestStatus ?? '').toLowerCase();
+    if (normalized.includes('delivered')) {
+      mappedStatus = 'delivered';
+    } else if (normalized.includes('transit') || normalized.includes('shipped')) {
+      mappedStatus = 'in_transit';
+    } else if (normalized.includes('pickup') || normalized.includes('picked')) {
+      mappedStatus = 'picked_up';
+    } else if (normalized.includes('cancel') || normalized.includes('failed')) {
+      mappedStatus = 'failed';
     }
-
-    const latestStatus = tracking?.data?.current_status ?? tracking?.status;
 
     const { data: updatedShipment } = await supabaseAdmin
       .from('shipments')
-      .update({ status: latestStatus ?? shipment.status, metadata: tracking })
+      .update({ 
+        status: mappedStatus ?? shipment.status, 
+        metadata: trackingData 
+      })
       .eq('id', shipment.id)
       .select()
       .maybeSingle();
 
-    return jsonResponse({ shipment: updatedShipment ?? shipment, tracking });
+    return jsonResponse({ 
+      shipment: updatedShipment ?? shipment, 
+      tracking: trackingData,
+      provider: 'Terminal Africa'
+    });
   } catch (error) {
     console.error('delivery-track error', error);
     return errorResponse(500, 'Unexpected error tracking delivery');
