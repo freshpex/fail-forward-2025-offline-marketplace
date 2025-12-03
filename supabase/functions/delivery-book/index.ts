@@ -217,6 +217,61 @@ serve(async (req: Request) => {
       // Don't fail the request, shipment is already booked
     }
 
+    // Send SMS notifications to buyer and seller about delivery booking
+    try {
+      // Get order details
+      const { data: orderDetails } = await supabaseAdmin
+        .from('orders')
+        .select(`
+          *,
+          listing:listings(id, crop),
+          manual_order:manual_orders(buyer_name, buyer_phone)
+        `)
+        .eq('id', body.order_id)
+        .maybeSingle();
+
+      if (orderDetails) {
+        const buyerPhone = orderDetails.manual_order?.[0]?.buyer_phone || orderDetails.buyer_contact;
+        const buyerName = orderDetails.manual_order?.[0]?.buyer_name || 'Customer';
+        const orderRef = orderDetails.order_reference || body.order_id.substring(0, 8);
+        const carrier = shipment.carrier?.name || 'Terminal Africa';
+        const trackingId = shipment.tracking_number || shipment.shipment_id;
+
+        // Notify buyer about delivery booking
+        if (buyerPhone) {
+          const buyerMessage = `Hi ${buyerName}! Great news - delivery has been booked for your order (Ref: ${orderRef})! Carrier: ${carrier}. Tracking ID: ${trackingId}. We'll update you when it's on the way.`;
+          
+          await supabaseAdmin.functions.invoke('send-sms', {
+            body: { 
+              to: buyerPhone, 
+              message: buyerMessage, 
+              order_id: orderDetails.id, 
+              type: 'delivery_booked' 
+            },
+          });
+          console.log(`Delivery booking SMS sent to buyer ${buyerPhone}`);
+        }
+
+        // Also notify the seller (sender)
+        if (body.sender?.phone) {
+          const sellerMessage = `Delivery booked! Order Ref: ${orderRef}. The ${carrier} courier will pick up the item. Tracking ID: ${trackingId}. Please ensure the item is ready.`;
+          
+          await supabaseAdmin.functions.invoke('send-sms', {
+            body: { 
+              to: body.sender.phone, 
+              message: sellerMessage, 
+              order_id: orderDetails.id, 
+              type: 'delivery_booked' 
+            },
+          });
+          console.log(`Delivery booking SMS sent to seller ${body.sender.phone}`);
+        }
+      }
+    } catch (smsError) {
+      // Don't fail the booking if SMS fails
+      console.error('Error sending delivery booking SMS:', smsError);
+    }
+
     return jsonResponse({
       success: true,
       shipment: {

@@ -94,6 +94,46 @@ serve(async (req: Request) => {
       return errorResponse(500, 'Failed to update order');
     }
 
+    // Send SMS notification to buyer when order is ready
+    if (nextStatus === 'ready_for_pickup' && updatedOrder) {
+      try {
+        // Get order details with listing and buyer info
+        const { data: orderDetails } = await supabaseAdmin
+          .from('orders')
+          .select(`
+            *,
+            listing:listings(id, crop, pickup_address),
+            manual_order:manual_orders(buyer_name, buyer_phone)
+          `)
+          .eq('id', payload.order_id)
+          .maybeSingle();
+
+        if (orderDetails) {
+          const buyerPhone = orderDetails.manual_order?.[0]?.buyer_phone || orderDetails.buyer_contact;
+          const buyerName = orderDetails.manual_order?.[0]?.buyer_name || 'Customer';
+          const listingTitle = orderDetails.listing?.crop || 'your order';
+          const orderRef = orderDetails.order_reference || payload.order_id.substring(0, 8);
+
+          if (buyerPhone) {
+            const message = `Good news, ${buyerName}! Your order "${listingTitle}" (Ref: ${orderRef}) is now ready for pickup/delivery. You will be contacted by our delivery partner soon. Thank you!`;
+            
+            await supabaseAdmin.functions.invoke('send-sms', {
+              body: { 
+                to: buyerPhone, 
+                message, 
+                order_id: orderDetails.id, 
+                type: 'order_ready' 
+              },
+            });
+            console.log(`SMS sent to buyer ${buyerPhone} for order ${orderRef}`);
+          }
+        }
+      } catch (smsError) {
+        // Don't fail the update if SMS fails
+        console.error('Error sending SMS notification:', smsError);
+      }
+    }
+
     return jsonResponse({ order: updatedOrder });
   } catch (error) {
     console.error('order-mark-ready error', error);

@@ -54,8 +54,8 @@ export async function syncPendingListings(): Promise<SyncResult> {
     const errors: string[] = [];
 
     for (const pending of pendingListings) {
-      // Skip if already syncing or failed
-      if (pending.status !== 'pending') continue;
+      // Process items that are 'pending' or 'syncing' (retry stuck syncs)
+      if (pending.status === 'failed') continue;
       
       try {
         // Mark as syncing to prevent duplicate processing
@@ -96,7 +96,8 @@ export async function syncPendingOrderUpdates(): Promise<SyncResult> {
     const errors: string[] = [];
 
     for (const update of pendingUpdates) {
-      if (update.status !== 'pending') continue;
+      // Process items that are 'pending' or 'syncing' (retry stuck syncs)
+      if (update.status === 'failed') continue;
       
       try {
         await updatePendingOrderUpdateStatus(update.localId, 'syncing');
@@ -153,7 +154,8 @@ export async function syncPendingListingEdits(): Promise<SyncResult> {
     const errors: string[] = [];
 
     for (const edit of pendingEdits) {
-      if (edit.status !== 'pending') continue;
+      // Process items that are 'pending' or 'syncing' (retry stuck syncs)
+      if (edit.status === 'failed') continue;
       
       try {
         await updatePendingListingEditStatus(edit.localId, 'syncing');
@@ -196,8 +198,9 @@ export async function syncPendingListingDeletes(): Promise<SyncResult> {
     console.log(`🗑️ Processing ${pendingDeletes.length} pending deletions...`);
 
     for (const deletion of pendingDeletes) {
-      if (deletion.status !== 'pending') {
-        console.log(`⏭️ Skipping deletion ${deletion.localId} with status: ${deletion.status}`);
+      // Process items that are 'pending' or 'syncing' (retry stuck syncs)
+      if (deletion.status === 'failed') {
+        console.log(`⏭️ Skipping failed deletion ${deletion.localId}`);
         continue;
       }
       

@@ -14,7 +14,7 @@ export function BrowseListings() {
   const isOnline = useOnlineStatus();
   const hasSyncedRef = useRef(false);
 
-  const { listings, pendingListings, loading, error, refetch } = useListings(appliedFilters);
+  const { listings, pendingListings, loading, error, refetch, isFromCache } = useListings(appliedFilters);
 
   // Only sync once when first coming online (using ref to prevent duplicates)
   useEffect(() => {
@@ -58,6 +58,19 @@ export function BrowseListings() {
     <div className="browse-listings">
       <h2>Browse Listings</h2>
 
+      {/* Offline indicator */}
+      {!isOnline && (
+        <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
+          📶 You are offline. Showing cached listings.
+        </div>
+      )}
+      
+      {isFromCache && isOnline && (
+        <div className="alert alert-info" style={{ marginBottom: '1rem' }}>
+          ⚠️ Showing cached listings. Some data may be outdated.
+        </div>
+      )}
+
       <div className="filters">
         <div className="filter-inputs">
           <Input
@@ -87,7 +100,12 @@ export function BrowseListings() {
 
       {!loading && allListings.length === 0 && (
         <div className="empty-state">
-          <p>No listings found. Be the first to list your produce!</p>
+          <p>
+            {!isOnline 
+              ? 'No cached listings available. Connect to the internet to browse listings.'
+              : 'No listings found. Be the first to list your produce!'
+            }
+          </p>
         </div>
       )}
 
