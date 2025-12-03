@@ -3,7 +3,18 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { Button } from '../components/Button';
 import { ComponentLoader } from '../components/ComponentLoader';
-import { showSuccess, showError } from '../utils/toast';
+import { showSuccess, showError, showWarning } from '../utils/toast';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { 
+  addPendingOrderUpdate, 
+  getPendingOrderUpdates,
+  cacheMyOrders,
+  getCachedMyOrders,
+  updateCachedOrder,
+  type PendingOrderUpdate,
+  type CachedOrder 
+} from '../services/db';
+import { syncPendingOrderUpdates, setupOnlineListener } from '../services/sync';
 
 interface Order {
   id: string;
@@ -28,6 +39,8 @@ interface Order {
     buyer_name: string;
     buyer_phone: string;
   }[] | null;
+  // Track if this order has a pending offline update
+  _pendingOffline?: boolean;
 }
 
 const ORDER_STATUSES = [
@@ -41,22 +54,76 @@ const ORDER_STATUSES = [
 
 export function SellerOrders() {
   const { user } = useAuth();
+  const isOnline = useOnlineStatus();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [pendingOfflineOrders, setPendingOfflineOrders] = useState<Set<string>>(new Set());
+
+  // Setup online listener to sync when connection is restored
+  useEffect(() => {
+    const cleanup = setupOnlineListener(async () => {
+      const result = await syncPendingOrderUpdates();
+      if (result.success > 0) {
+        showSuccess(`Synced ${result.success} order update(s)`);
+        loadOrders();
+      }
+      if (result.failed > 0) {
+        showError(`Failed to sync ${result.failed} order update(s)`);
+      }
+    });
+    
+    return cleanup;
+  }, []);
+
+  // Load pending offline orders on mount
+  useEffect(() => {
+    loadPendingOfflineOrders();
+  }, []);
+
+  const loadPendingOfflineOrders = async () => {
+    const pending = await getPendingOrderUpdates();
+    const pendingIds = new Set(pending.filter(p => p.status === 'pending').map(p => p.orderId));
+    setPendingOfflineOrders(pendingIds);
+  };
 
   useEffect(() => {
     if (user) {
       loadOrders();
     }
-  }, [user]);
+  }, [user, isOnline]);
 
   const loadOrders = async () => {
     if (!user) return;
     
     try {
       setLoading(true);
+      
+      // If offline, load from cache
+      if (!isOnline) {
+        console.log('📶 Offline: Loading orders from cache');
+        const cachedOrders = await getCachedMyOrders();
+        
+        // Mark orders with pending offline updates
+        const pending = await getPendingOrderUpdates();
+        const pendingIds = new Set(pending.filter(p => p.status === 'pending').map(p => p.orderId));
+        setPendingOfflineOrders(pendingIds);
+        
+        const ordersWithPendingFlag = cachedOrders.map(order => ({
+          ...order,
+          _pendingOffline: pendingIds.has(order.id),
+        })) as Order[];
+        
+        setOrders(ordersWithPendingFlag);
+        
+        if (cachedOrders.length === 0) {
+          showWarning('No cached orders available. Connect to the internet to load orders.');
+        }
+        return;
+      }
+      
+      // Online: Fetch from server
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -68,10 +135,41 @@ export function SellerOrders() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Cache orders for offline use
+      if (data && data.length > 0) {
+        await cacheMyOrders(data as CachedOrder[]);
+        console.log(`✅ Cached ${data.length} orders for offline use`);
+      }
+      
+      // Mark orders with pending offline updates
+      const pending = await getPendingOrderUpdates();
+      const pendingIds = new Set(pending.filter(p => p.status === 'pending').map(p => p.orderId));
+      setPendingOfflineOrders(pendingIds);
+      
+      const ordersWithPendingFlag = (data || []).map(order => ({
+        ...order,
+        _pendingOffline: pendingIds.has(order.id),
+      }));
+      
+      setOrders(ordersWithPendingFlag);
     } catch (err) {
       console.error('Error loading orders:', err);
-      showError('Failed to load orders');
+      
+      // On error, try to load from cache as fallback
+      const cachedOrders = await getCachedMyOrders();
+      if (cachedOrders.length > 0) {
+        const pending = await getPendingOrderUpdates();
+        const pendingIds = new Set(pending.filter(p => p.status === 'pending').map(p => p.orderId));
+        const ordersWithPendingFlag = cachedOrders.map(order => ({
+          ...order,
+          _pendingOffline: pendingIds.has(order.id),
+        })) as Order[];
+        setOrders(ordersWithPendingFlag);
+        showWarning('Using cached orders. Some data may be outdated.');
+      } else {
+        showError('Failed to load orders');
+      }
     } finally {
       setLoading(false);
     }
@@ -81,7 +179,34 @@ export function SellerOrders() {
     try {
       setUpdating(orderId);
       
-      // Call the mark-ready edge function
+      // If offline, queue the update
+      if (!isOnline) {
+        const pendingUpdate: PendingOrderUpdate = {
+          localId: `order-ready-${orderId}-${Date.now()}`,
+          orderId,
+          action: 'mark_ready',
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        };
+        
+        await addPendingOrderUpdate(pendingUpdate);
+        
+        // Also update the cached order for consistency
+        await updateCachedOrder(orderId, { status: 'ready_for_pickup' });
+        
+        // Optimistically update the UI
+        setOrders(prev => prev.map(order => 
+          order.id === orderId 
+            ? { ...order, status: 'ready_for_pickup', _pendingOffline: true } 
+            : order
+        ));
+        setPendingOfflineOrders(prev => new Set([...prev, orderId]));
+        
+        showWarning('You are offline. Order will be updated when you reconnect.');
+        return;
+      }
+      
+      // Online: Call the mark-ready edge function
       const { error } = await supabase.functions.invoke('order-mark-ready', {
         body: { order_id: orderId },
       });
@@ -145,6 +270,28 @@ export function SellerOrders() {
             Manage orders for your produce listings
           </p>
         </div>
+
+        {/* Offline indicator */}
+        {!isOnline && (
+          <div className="orders-alert offline">
+            <div className="alert-icon">📶</div>
+            <div className="alert-content">
+              <h3>You're offline</h3>
+              <p>Changes will be synced when you reconnect to the internet.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Pending sync indicator */}
+        {pendingOfflineOrders.size > 0 && isOnline && (
+          <div className="orders-alert sync">
+            <div className="alert-icon">🔄</div>
+            <div className="alert-content">
+              <h3>{pendingOfflineOrders.size} pending update{pendingOfflineOrders.size > 1 ? 's' : ''}</h3>
+              <p>Some changes made offline are being synced...</p>
+            </div>
+          </div>
+        )}
 
         {/* Alert for orders needing preparation */}
         {pendingPrepOrders.length > 0 && (
@@ -212,9 +359,15 @@ export function SellerOrders() {
               const statusInfo = getStatusInfo(order.status);
               const buyerInfo = order.manual_order?.[0];
               const needsPrep = order.status === 'payment_verified';
+              const hasPendingUpdate = order._pendingOffline || pendingOfflineOrders.has(order.id);
 
               return (
-                <div key={order.id} className={`order-card ${needsPrep ? 'needs-action' : ''}`}>
+                <div key={order.id} className={`order-card ${needsPrep ? 'needs-action' : ''} ${hasPendingUpdate ? 'pending-sync' : ''}`}>
+                  {hasPendingUpdate && (
+                    <div className="pending-sync-banner">
+                      <span>⏳ Pending sync when online</span>
+                    </div>
+                  )}
                   <div className="order-card-header">
                     <div className="order-ref">
                       <span className="label">Order</span>

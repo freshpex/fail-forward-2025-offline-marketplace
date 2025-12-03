@@ -8,9 +8,15 @@ import { ImageUpload } from '../components/ImageUpload';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { createListing, updateListing } from '../services/api';
-import { addPendingListing } from '../services/db';
+import { 
+  addPendingListing, 
+  addPendingListingEdit,
+  getCachedListingById,
+  updateCachedListing 
+} from '../services/db';
 import { supabase } from '../services/supabase';
-import { NewListing, PendingListing } from '../types';
+import { NewListing, PendingListing, Listing } from '../types';
+import { showWarning } from '../utils/toast';
 
 const PACKAGE_TYPES = [
   { value: 'bags', label: 'Bags' },
@@ -83,13 +89,74 @@ export function CreateListing() {
     preferred_schedule: ''
   });
 
+  // State to track if loaded from cache
+  const [loadedFromCache, setLoadedFromCache] = useState(false);
+
+  // Helper to populate form from listing data
+  const populateFormFromListing = (data: Listing) => {
+    setFormData({
+      crop: data.crop || '',
+      quantity: data.quantity?.toString() || '',
+      unit: PACKAGE_TYPES.some((option) => option.value === data.unit)
+        ? data.unit
+        : data.unit
+        ? 'custom'
+        : '',
+      custom_unit: PACKAGE_TYPES.some((option) => option.value === data.unit)
+        ? ''
+        : data.unit || '',
+      measurement_unit: MEASUREMENT_UNITS.some((option) => option.value === data.measurement_unit)
+        ? data.measurement_unit ?? ''
+        : data.measurement_unit
+        ? 'custom'
+        : '',
+      custom_measurement_unit: MEASUREMENT_UNITS.some((option) => option.value === data.measurement_unit)
+        ? ''
+        : data.measurement_unit || '',
+      measurement_value: data.measurement_value?.toString() || '',
+      unit_description: data.unit_description || '',
+      price: data.price?.toString() || '',
+      location: data.location || '',
+      contact_phone: data.contact_phone || '',
+      contact_email: data.contact_email || '',
+      farmer_name: data.farmer_name || '',
+      image_url: data.image_url || '',
+      pickup_address: data.pickup_address || '',
+      pickup_city: data.pickup_city || '',
+      pickup_state: data.pickup_state || '',
+      harvest_date: data.harvest_date || '',
+      preferred_schedule: data.preferred_schedule || ''
+    });
+  };
+
   // Load existing listing data when in edit mode
   useEffect(() => {
     const loadListing = async () => {
       if (!listingId) return;
       
       setLoadingListing(true);
+      setLoadedFromCache(false);
+      
       try {
+        // If offline, try to load from cache first
+        if (!isOnline) {
+          console.log('📶 Offline: Attempting to load listing from cache');
+          const cachedListing = await getCachedListingById(listingId);
+          
+          if (cachedListing) {
+            populateFormFromListing(cachedListing);
+            setLoadedFromCache(true);
+            showWarning('Loaded from cache. Changes will be saved when you reconnect.');
+            setLoadingListing(false);
+            return;
+          } else {
+            setError('Listing not available offline. Please connect to the internet.');
+            setLoadingListing(false);
+            return;
+          }
+        }
+        
+        // Online: Fetch from server
         const { data, error } = await supabase
           .from('listings')
           .select('*')
@@ -99,50 +166,27 @@ export function CreateListing() {
         if (error) throw error;
         
         if (data) {
-          setFormData({
-            crop: data.crop || '',
-            quantity: data.quantity?.toString() || '',
-            unit: PACKAGE_TYPES.some((option) => option.value === data.unit)
-              ? data.unit
-              : data.unit
-              ? 'custom'
-              : '',
-            custom_unit: PACKAGE_TYPES.some((option) => option.value === data.unit)
-              ? ''
-              : data.unit || '',
-            measurement_unit: MEASUREMENT_UNITS.some((option) => option.value === data.measurement_unit)
-              ? data.measurement_unit ?? ''
-              : data.measurement_unit
-              ? 'custom'
-              : '',
-            custom_measurement_unit: MEASUREMENT_UNITS.some((option) => option.value === data.measurement_unit)
-              ? ''
-              : data.measurement_unit || '',
-            measurement_value: data.measurement_value?.toString() || '',
-            unit_description: data.unit_description || '',
-            price: data.price?.toString() || '',
-            location: data.location || '',
-            contact_phone: data.contact_phone || '',
-            contact_email: data.contact_email || '',
-            farmer_name: data.farmer_name || '',
-            image_url: data.image_url || '',
-            pickup_address: data.pickup_address || '',
-            pickup_city: data.pickup_city || '',
-            pickup_state: data.pickup_state || '',
-            harvest_date: data.harvest_date || '',
-            preferred_schedule: data.preferred_schedule || ''
-          });
+          populateFormFromListing(data as Listing);
         }
       } catch (err) {
         console.error('Error loading listing:', err);
-        setError('Failed to load listing details');
+        
+        // On error, try to load from cache as fallback
+        const cachedListing = await getCachedListingById(listingId);
+        if (cachedListing) {
+          populateFormFromListing(cachedListing);
+          setLoadedFromCache(true);
+          showWarning('Using cached data. Some information may be outdated.');
+        } else {
+          setError('Failed to load listing details');
+        }
       } finally {
         setLoadingListing(false);
       }
     };
     
     loadListing();
-  }, [listingId]);
+  }, [listingId, isOnline]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -191,15 +235,36 @@ export function CreateListing() {
           setTimeout(() => navigate('/browse'), 1500);
         }
       } else {
-        const pendingListing: PendingListing = {
-          ...listingData,
-          localId: `local-${Date.now()}-${Math.random()}`,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        };
-        await addPendingListing(pendingListing);
-        setSuccess(true);
-        setTimeout(() => navigate('/browse'), 1500);
+        // Offline: Queue the changes
+        if (isEditMode && listingId) {
+          // Queue edit for later sync
+          await addPendingListingEdit({
+            localId: `edit-${listingId}-${Date.now()}`,
+            listingId,
+            updates: listingData as Partial<Listing>,
+            status: 'pending',
+            created_at: new Date().toISOString()
+          });
+          
+          // Also update the local cache for consistency
+          await updateCachedListing(listingId, listingData as Partial<Listing>);
+          
+          showWarning('You are offline. Changes will be saved when you reconnect.');
+          setSuccess(true);
+          setTimeout(() => navigate('/my-listings'), 1500);
+        } else {
+          // Queue new listing for later sync
+          const pendingListing: PendingListing = {
+            ...listingData,
+            localId: `local-${Date.now()}-${Math.random()}`,
+            status: 'pending',
+            created_at: new Date().toISOString()
+          };
+          await addPendingListing(pendingListing);
+          showWarning('You are offline. Listing will be created when you reconnect.');
+          setSuccess(true);
+          setTimeout(() => navigate('/browse'), 1500);
+        }
       }
 
       if (!isEditMode) {
@@ -236,7 +301,7 @@ export function CreateListing() {
     return (
       <div className="create-listing">
         <h2>Loading Listing...</h2>
-        <p>Please wait while we load the listing details.</p>
+        <p>Please wait while we load the listing details{!isOnline ? ' from cache' : ''}.</p>
       </div>
     );
   }
@@ -246,15 +311,38 @@ export function CreateListing() {
       <h2>{isEditMode ? 'Edit Listing' : 'List Your Produce'}</h2>
       <p className="page-subtitle">
         {isEditMode 
-          ? 'Update your listing details below'
+          ? (isOnline 
+              ? 'Update your listing details below'
+              : loadedFromCache 
+                ? 'You\'re offline. Changes will sync when you reconnect.'
+                : 'Update your listing details below')
           : isOnline
             ? 'Fill out the form below to create your listing'
             : 'You\'re offline. Your listing will be saved and synced when you reconnect.'}
       </p>
 
+      {/* Offline indicator */}
+      {!isOnline && (
+        <div className="offline-banner" style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#fef3c7', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span>📶</span>
+          <span>You're offline. {isEditMode ? 'Edits' : 'This listing'} will sync when you reconnect.</span>
+        </div>
+      )}
+
+      {/* Loaded from cache indicator */}
+      {loadedFromCache && (
+        <div className="cache-banner" style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#dbeafe', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span>💾</span>
+          <span>Loaded from offline cache. Some data may be outdated.</span>
+        </div>
+      )}
+
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">
-        Listing {isOnline ? 'created' : 'saved for sync'} successfully! Redirecting...
+        {isEditMode
+          ? (isOnline ? 'Listing updated' : 'Edit saved for sync')
+          : (isOnline ? 'Listing created' : 'Listing saved for sync')
+        } successfully! Redirecting...
       </div>}
 
       <form onSubmit={handleSubmit} className="listing-form">

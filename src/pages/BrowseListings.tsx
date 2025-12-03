@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ListingCard } from '../components/ListingCard';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
@@ -12,18 +12,29 @@ export function BrowseListings() {
   const [locationFilter, setLocationFilter] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<{ crop?: string; location?: string }>({});
   const isOnline = useOnlineStatus();
+  const hasSyncedRef = useRef(false);
 
   const { listings, pendingListings, loading, error, refetch } = useListings(appliedFilters);
 
+  // Only sync once when first coming online (using ref to prevent duplicates)
   useEffect(() => {
-    if (isOnline) {
+    if (isOnline && !hasSyncedRef.current) {
+      hasSyncedRef.current = true;
       syncPendingListings().then(() => refetch());
+    }
+    // Reset when going offline so we sync again next time we come online
+    if (!isOnline) {
+      hasSyncedRef.current = false;
     }
   }, [isOnline]);
 
+  // Setup online event listener (browser's online event)
   useEffect(() => {
     const cleanup = setupOnlineListener(() => {
-      syncPendingListings().then(() => refetch());
+      if (!hasSyncedRef.current) {
+        hasSyncedRef.current = true;
+        syncPendingListings().then(() => refetch());
+      }
     });
     return cleanup;
   }, []);

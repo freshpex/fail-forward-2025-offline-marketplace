@@ -51,8 +51,9 @@ export interface NewListing {
 
 export interface PendingListing extends NewListing {
   localId: string;
-  status: 'pending';
+  status: 'pending' | 'syncing' | 'failed';
   created_at: string;
+  error?: string;
 }
 
 export interface ReferencePrice {

@@ -4,3 +4,7 @@ node_modules/
 sw.js
 dev-dist/workbox-137dedbd.js
 supabase/config.toml
+div
+dist
+dev-dist
+dev-dist/registerSW.js

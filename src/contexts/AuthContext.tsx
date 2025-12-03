@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
+import { prefetchUserDataForOffline } from '../services/offlineDataService';
 
 interface AuthContextType {
   user: User | null;
@@ -23,12 +24,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      // Prefetch data for offline use if user is logged in
+      if (session?.user && navigator.onLine) {
+        prefetchUserDataForOffline(session.user.id).catch(console.error);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      // Prefetch data when user signs in
+      if (_event === 'SIGNED_IN' && session?.user && navigator.onLine) {
+        prefetchUserDataForOffline(session.user.id).catch(console.error);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -48,6 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.user && !error) {
       setUser(data.user);
       setSession(data.session);
+      
+      // Prefetch data for the new user
+      if (navigator.onLine) {
+        prefetchUserDataForOffline(data.user.id).catch(console.error);
+      }
     }
 
     return { user: data.user, error };
@@ -62,6 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.user && !error) {
       setUser(data.user);
       setSession(data.session);
+      
+      // Prefetch data for offline use immediately after login
+      if (navigator.onLine) {
+        console.log('📦 Prefetching user data for offline access...');
+        prefetchUserDataForOffline(data.user.id).catch(console.error);
+      }
     }
 
     return { user: data.user, error };

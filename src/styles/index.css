@@ -99,6 +99,135 @@ body {
   padding: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.sync-banner {
+  background: #3b82f6;
+  color: white;
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Pending delete overlay for listings */
+.listing-card-wrapper.pending-delete {
+  position: relative;
+  opacity: 0.6;
+}
+
+.listing-card-wrapper.pending-edit {
+  position: relative;
+  border: 2px dashed var(--primary);
+}
+
+.pending-delete-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--warning);
+  color: white;
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 10;
+  border-radius: 8px 8px 0 0;
+}
+
+.pending-edit-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--primary);
+  color: white;
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 10;
+  border-radius: 8px 8px 0 0;
+}
+
+/* Pending sync banner for order cards */
+.order-card.pending-sync {
+  position: relative;
+  border: 2px dashed var(--warning);
+}
+
+.pending-sync-banner {
+  background: var(--warning);
+  color: white;
+  text-align: center;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px 4px 0 0;
+}
+
+/* Orders alert styles */
+.orders-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.orders-alert.warning {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+}
+
+.orders-alert.info {
+  background: #dbeafe;
+  border: 1px solid #3b82f6;
+}
+
+.orders-alert.offline {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+}
+
+.orders-alert.sync {
+  background: #dbeafe;
+  border: 1px solid #3b82f6;
+}
+
+.orders-alert .alert-icon {
+  font-size: 1.5rem;
+}
+
+.orders-alert .alert-content h3 {
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.orders-alert .alert-content p {
+  font-size: 0.875rem;
+  color: var(--text-light);
+  margin: 0;
 }
 
 .main {
