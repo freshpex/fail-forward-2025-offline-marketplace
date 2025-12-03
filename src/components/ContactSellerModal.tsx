@@ -675,7 +675,6 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
                   <Button
                     onClick={() => {
                       showSuccess('Contact the seller using the details above');
-                      onClose();
                     }}
                     className="btn-primary btn-large"
                   >
