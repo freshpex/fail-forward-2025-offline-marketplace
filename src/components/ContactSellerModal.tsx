@@ -612,7 +612,7 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
             </div>
           </div>
 
-          {step === 'contact' && (
+          {step === 'delivery' && (
             <>
               <div className="modal-actions">
                 <Button
@@ -650,7 +650,7 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
             </>
           )}
 
-          {step === 'delivery' && (
+          {step === 'contact' && (
             <>
               <div className="delivery-options-section">
                 <h4>Select Delivery Method</h4>
