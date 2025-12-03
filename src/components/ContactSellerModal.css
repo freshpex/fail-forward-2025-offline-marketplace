@@ -352,11 +352,17 @@
   padding: 0.75rem 1rem;
   background: var(--primary);
   color: white;
+  text-decoration: none;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 0.9375rem;
   transition: all 0.2s;
 }
 
+.contact-link:hover {
+  background: var(--primary-light);
+  transform: translateY(-2px);
+}
 
 .contact-note {
   margin: 0;
