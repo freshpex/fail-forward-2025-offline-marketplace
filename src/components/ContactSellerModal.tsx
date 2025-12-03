@@ -95,17 +95,19 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
   const sellerPhone = listing.contact_phone || listing.seller_profile?.phone || '';
   const sellerEmail = listing.contact_email || null;
   const availableQuantity = Math.max(1, listing.quantity || 1);
-  const unitPrice = listing.price ?? 0;
+  
+  // Ensure price is a valid number (handle null, undefined, string, or NaN)
+  const unitPrice = Number(listing.price) || 0;
   const produceTotal = unitPrice * purchaseQuantity;
   
   // Get selected courier fee or cheapest fee
-  const getDeliveryFee = () => {
+  const getDeliveryFee = (): number => {
     if (!deliveryQuote) return 0;
     if (selectedCourier && deliveryQuote.couriers) {
       const courier = deliveryQuote.couriers.find(c => c.courier_id === selectedCourier);
-      return courier?.total ?? deliveryQuote.fee;
+      return Number(courier?.total) || Number(deliveryQuote.fee) || 0;
     }
-    return deliveryQuote.cheapest_courier?.total ?? deliveryQuote.fee;
+    return Number(deliveryQuote.cheapest_courier?.total) || Number(deliveryQuote.fee) || 0;
   };
   
   const deliveryFee = getDeliveryFee();
@@ -322,7 +324,16 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
       }
 
       const paymentEmail = manualDetails.buyer_email || user?.email || 'guest@marketplace.com';
-      const paymentAmount = grandTotal * 100; // Paystack expects amount in kobo
+      
+      // Ensure amount is a valid positive integer (Paystack expects kobo)
+      const rawAmount = grandTotal * 100;
+      const paymentAmount = Math.round(rawAmount);
+      
+      // Validate the amount
+      if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+        console.error('delivery method not available, please change delivery method:', { grandTotal, rawAmount, paymentAmount });
+        throw new Error(`Invalid payment amount, delivery method not available: ₦${grandTotal?.toLocaleString() || 'N/A'}. Please check the listing price.`);
+      }
 
       const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
@@ -392,6 +403,12 @@ export function ContactSellerModal({ listing, onClose }: ContactSellerModalProps
     if (deliveryOption?.type === 'manual') {
       showSuccess('Contact the seller using the details shown above.');
       onClose();
+      return;
+    }
+
+    // Validate payment amount before proceeding
+    if (!Number.isFinite(grandTotal) || grandTotal <= 0) {
+      showError(`Invalid payment amount: ₦${grandTotal?.toLocaleString() || 'N/A'}. Please check the listing price and try again.`);
       return;
     }
 
