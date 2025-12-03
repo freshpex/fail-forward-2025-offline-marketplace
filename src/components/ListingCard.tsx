@@ -125,7 +125,7 @@ export function ListingCard({ listing, showContactButton = true }: ListingCardPr
               className="contact-seller-btn"
               onClick={() => setShowModal(true)}
             >
-             View
+             Click to Order
             </button>
           </>
         )}
